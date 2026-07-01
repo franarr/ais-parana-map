@@ -188,8 +188,8 @@ body {
   gap: 5px;
   padding: 6px 12px;
   border-radius: 20px;
-  border: 1px solid var(--c-border);
-  background: rgba(18,20,15,.85);
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(18,20,15,.35); /* Transparente para los inactivos (los "otros") */
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   color: var(--c-muted);
@@ -206,7 +206,7 @@ body {
 
 .chip:active  { transform: scale(0.94); }
 .chip.active  {
-  background: rgba(128,161,98,.15);
+  background: rgba(18,20,15,.95); /* Negro sólido para el que "se apreta" */
   border-color: var(--c-accent);
   color: var(--c-text);
 }
