@@ -41,13 +41,6 @@
   <!-- Chips de filtro: fila scrollable horizontal, sin scrollbar visible -->
   <nav class="chips-bar" aria-label="Filtros de objetos AIS">
 
-    <!-- Chip "En vivo": indicador de actualizacion automatica (no es boton) -->
-    <div class="chip chip-live" aria-live="polite" title="Los datos AIS se actualizan automaticamente">
-      <span class="live-dot" aria-hidden="true"></span>
-      <span>En vivo</span>
-      <span class="live-countdown" id="live-countdown">60s</span>
-    </div>
-
     <!-- Chips togglables: filtran que tipo de objeto AIS se muestra -->
     <button class="chip active" id="chip-buques"
             data-filter="buques" aria-pressed="true">
@@ -66,11 +59,18 @@
 
     <button class="chip active" id="chip-puertos"
             data-filter="puertos" aria-pressed="true">
-      Puertos
+      Puertos <span class="chip-badge" id="badge-puertos">-</span>
     </button>
 
   </nav>
 </header>
+
+<!-- Indicador flotante "En vivo" -->
+<div id="live-indicator" class="live-indicator" aria-live="polite" title="Los datos AIS se actualizan automaticamente">
+  <span class="live-dot" aria-hidden="true"></span>
+  <span class="live-text">En vivo</span>
+  <span class="live-countdown" id="live-countdown">5m 00s</span>
+</div>
 
 <!-- ══════════════════════════════════════════
      MAPA (Leaflet)

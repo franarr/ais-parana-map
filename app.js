@@ -310,6 +310,8 @@ async function cargarCapasReferencia() {
         );
       },
     }).addTo(capaPuertos);
+    const badgePuertos = document.getElementById('badge-puertos');
+    if (badgePuertos && data.features) badgePuertos.textContent = data.features.length;
   } catch(e) { console.error('Puertos:', e); }
 
   // Cursos de agua (tono rojizo, preservado)
@@ -825,17 +827,24 @@ document.getElementById('fab-reset').addEventListener('click', () => {
    Muestra en el chip "En vivo" el tiempo restante
    hasta la próxima actualización de datos AIS.
    ══════════════════════════════════════════ */
-let countdownVal = 60;
+let countdownVal = 300;
 const countdownEl = document.getElementById('live-countdown');
+
+function formatCountdown(sec) {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m > 0) return `${m}m ${s.toString().padStart(2, '0')}s`;
+  return `${s}s`;
+}
 
 setInterval(() => {
   countdownVal = Math.max(0, countdownVal - 1);
-  if (countdownEl) countdownEl.textContent = `${countdownVal}s`;
+  if (countdownEl) countdownEl.textContent = formatCountdown(countdownVal);
 }, 1000);
 
 function resetCountdown() {
-  countdownVal = 60;
-  if (countdownEl) countdownEl.textContent = '60s';
+  countdownVal = 300;
+  if (countdownEl) countdownEl.textContent = formatCountdown(countdownVal);
 }
 
 
@@ -902,8 +911,7 @@ async function cargarDatos() {
   }
 }
 
-// Primera carga
+// Carga inicial y auto-refresco cada 5 minutos
+cargarCapasReferencia();
 cargarDatos();
-
-// Actualización automática cada 60 segundos (preservado del original)
-setInterval(cargarDatos, 60_000);
+setInterval(cargarDatos, 300_000);
