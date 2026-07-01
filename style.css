@@ -765,9 +765,10 @@ body {
     transition: none !important;
   }
   
-  /* Mover el indicador "En vivo" a la izquierda del sidebar */
+  /* Mover el indicador "En vivo" a la esquina superior izquierda en desktop */
   .live-indicator {
-    right: calc(var(--sidebar-w) + 48px);
+    left: 24px;
+    right: auto;
     top: 24px;
   }
 
