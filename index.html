@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AIS Paraná - Tránsito de buques</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root{
+    --bg: #0b1620;
+    --panel: #10202c;
+    --line: #1f3441;
+    --text: #d8e6ee;
+    --muted: #7f9aab;
+    --accent: #2fb6c9;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+
+  #map { position: absolute; inset: 0; }
+
+  #panel {
+    position: absolute; top: 12px; left: 12px; z-index: 1000;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; min-width: 240px; max-height: calc(100% - 24px); overflow-y: auto;
+    box-shadow: 0 6px 20px rgba(0,0,0,.35);
+  }
+  #panel h1 { font-size: 14px; margin: 0 0 8px; letter-spacing: .02em; color: var(--text); }
+  #panel .updated { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  #panel .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 10px 0 4px; }
+  #panel label { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
+  #panel input[type=checkbox] { accent-color: var(--accent); }
+  #status { font-size: 11px; color: var(--muted); margin-top: 10px; }
+  #status.error { color: #e0847a; }
+
+  .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border-radius: 8px; }
+  .leaflet-popup-tip { background: var(--panel); }
+  .popup-title { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
+  .popup-sub { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .popup-row { font-size: 12px; color: var(--text); }
+  .popup-row b { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div id="panel">
+  <h1>Tránsito AIS · Paraná</h1>
+  <div class="updated" id="updated">Cargando datos…</div>
+
+  <div class="section-title">Zonas</div>
+  <div id="filters-zonas"></div>
+
+  <div class="section-title">Tipo de objetivo</div>
+  <label><input type="checkbox" id="chk-buques" checked> Buques</label>
+  <label><input type="checkbox" id="chk-atones" checked> Balizas / AtoN</label>
+  <label><input type="checkbox" id="chk-bases" checked> Estaciones base</label>
+
+  <div id="status"></div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // ---------- Config ----------
+  const DATA_URL = "data/latest.json";
+  const ESCALA = 600000; // AIS: 1/10000 de minuto => grados = valor / 600000
+
+  const ZONE_COLORS = {
+    SanLorenzo: "#2fb6c9",
+    Rosario: "#c98f2f",
+    DelGuazu: "#8f2fc9",
+    Braga: "#2fc95a",
+    BellaVista: "#c92f5a",
+  };
+
+  const TYPE_LABEL = { 0: "Buque", 1: "Buque", 3: "Estación base", 4: "Baliza / AtoN" };
+
+  const map = L.map("map", { zoomControl: true }).setView([-32.75, -60.7], 10);
+
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 18,
+  }).addTo(map);
+
+  const zoneLayerGroups = {};   // nombreZona -> L.LayerGroup (todos los marcadores de esa zona)
+  let markersMeta = [];         // { marker, zona, tipo } para aplicar filtros combinados
+
+  function escapeHtml(str) {
+    return String(str ?? "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[c]));
+  }
+
+  function decodeCoord(v) { return v / ESCALA; }
+
+  function edadTexto(segundos) {
+    if (segundos == null) return "";
+    if (segundos < 60) return `hace ${segundos}s`;
+    if (segundos < 3600) return `hace ${Math.round(segundos / 60)} min`;
+    return `hace ${(segundos / 3600).toFixed(1)} h`;
+  }
+
+  function popupHTML(mmsi, tgt) {
+    const nombre = tgt.n && tgt.n.trim() ? tgt.n.trim() : `MMSI ${mmsi}`;
+    const tipo = TYPE_LABEL[tgt.t] || `Tipo ${tgt.t}`;
+    const filas = [];
+    filas.push(`<div class="popup-row"><b>MMSI</b>: ${escapeHtml(mmsi)}</div>`);
+    filas.push(`<div class="popup-row"><b>Tipo</b>: ${escapeHtml(tipo)}</div>`);
+    if (tgt.s !== undefined) filas.push(`<div class="popup-row"><b>Velocidad</b>: ${(tgt.s / 10).toFixed(1)} nudos</div>`);
+    if (tgt.c !== undefined) filas.push(`<div class="popup-row"><b>Rumbo</b>: ${(tgt.c / 10).toFixed(1)}°</div>`);
+    if (tgt.a !== undefined) filas.push(`<div class="popup-row"><b>Última señal</b>: ${edadTexto(tgt.a)}</div>`);
+    return `<div class="popup-title">${escapeHtml(nombre)}</div>${filas.join("")}`;
+  }
+
+  function iconoPara(tipo, color) {
+    // buques: círculo | AtoN: rombo | bases: cuadrado
+    if (tipo === 4) {
+      return L.divIcon({
+        className: "",
+        html: `<div style="width:10px;height:10px;background:${color};transform:rotate(45deg);border:1.5px solid #06222b;"></div>`,
+        iconSize: [10, 10],
+      });
+    }
+    if (tipo === 3) {
+      return L.divIcon({
+        className: "",
+        html: `<div style="width:9px;height:9px;background:${color};border:1.5px solid #06222b;"></div>`,
+        iconSize: [9, 9],
+      });
+    }
+    return null; // buques usan circleMarker
+  }
+
+  function renderZona(nombreZona, dataZona) {
+    if (zoneLayerGroups[nombreZona]) map.removeLayer(zoneLayerGroups[nombreZona]);
+    const grupo = L.layerGroup();
+    const color = ZONE_COLORS[nombreZona] || "#2fb6c9";
+    const tgts = (dataZona && dataZona.tgts) || {};
+
+    let count = 0;
+    Object.entries(tgts).forEach(([mmsi, tgt]) => {
+      if (typeof tgt.x !== "number" || typeof tgt.y !== "number") return;
+      const lat = decodeCoord(tgt.y);
+      const lon = decodeCoord(tgt.x);
+      let marker;
+
+      if (tgt.t === 3 || tgt.t === 4) {
+        marker = L.marker([lat, lon], { icon: iconoPara(tgt.t, color) });
+      } else {
+        marker = L.circleMarker([lat, lon], {
+          radius: 6, color: "#06222b", weight: 2, fillColor: color, fillOpacity: 0.9,
+        });
+      }
+      marker.bindPopup(popupHTML(mmsi, tgt));
+      grupo.addLayer(marker);
+      markersMeta.push({ marker, zona: nombreZona, tipo: tgt.t });
+      count++;
+    });
+
+    zoneLayerGroups[nombreZona] = grupo;
+    grupo.addTo(map);
+    return count;
+  }
+
+  function construirFiltrosZona(zonas) {
+    const cont = document.getElementById("filters-zonas");
+    cont.innerHTML = "";
+    Object.keys(zonas).forEach(nombreZona => {
+      const id = "chk-zona-" + nombreZona;
+      const label = document.createElement("label");
+      label.innerHTML = `<input type="checkbox" id="${id}" checked> <span style="color:${ZONE_COLORS[nombreZona] || '#fff'}">●</span> ${nombreZona}`;
+      cont.appendChild(label);
+      document.getElementById(id).addEventListener("change", aplicarFiltros);
+    });
+  }
+
+  function aplicarFiltros() {
+    const zonasActivas = new Set(
+      Object.keys(zoneLayerGroups).filter(z => {
+        const chk = document.getElementById("chk-zona-" + z);
+        return chk ? chk.checked : true;
+      })
+    );
+    const mostrarBuques = document.getElementById("chk-buques").checked;
+    const mostrarAtones = document.getElementById("chk-atones").checked;
+    const mostrarBases = document.getElementById("chk-bases").checked;
+
+    markersMeta.forEach(({ marker, zona, tipo }) => {
+      const tipoVisible =
+        ((tipo === 0 || tipo === 1) && mostrarBuques) ||
+        (tipo === 4 && mostrarAtones) ||
+        (tipo === 3 && mostrarBases) ||
+        ![0, 1, 3, 4].includes(tipo);
+      const visible = zonasActivas.has(zona) && tipoVisible;
+      const yaEnMapa = map.hasLayer(marker);
+      if (visible && !yaEnMapa) marker.addTo(map);
+      if (!visible && yaEnMapa) map.removeLayer(marker);
+    });
+  }
+
+  ["chk-buques", "chk-atones", "chk-bases"].forEach(id =>
+    document.getElementById(id).addEventListener("change", aplicarFiltros)
+  );
+
+  async function cargarDatos() {
+    const statusEl = document.getElementById("status");
+    const updatedEl = document.getElementById("updated");
+    try {
+      const resp = await fetch(DATA_URL, { cache: "no-store" });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+
+      updatedEl.textContent = "Última actualización: " + (data.actualizado
+        ? new Date(data.actualizado).toLocaleString("es-AR")
+        : "desconocida");
+
+      construirFiltrosZona(data.zonas || {});
+      markersMeta = [];
+
+      let total = 0;
+      let primerCentro = null;
+      Object.entries(data.zonas || {}).forEach(([nombreZona, dataZona]) => {
+        total += renderZona(nombreZona, dataZona);
+        if (!primerCentro && dataZona && typeof dataZona.x === "number") {
+          primerCentro = [decodeCoord(dataZona.y), decodeCoord(dataZona.x)];
+        }
+      });
+
+      if (primerCentro && !window.__mapaCentrado) {
+        map.setView(primerCentro, 11);
+        window.__mapaCentrado = true;
+      }
+
+      statusEl.className = "";
+      statusEl.textContent = total > 0
+        ? `${total} objetivos en pantalla`
+        : "No se encontraron objetivos en el JSON.";
+    } catch (err) {
+      statusEl.className = "error";
+      statusEl.textContent = "Error cargando datos: " + err.message;
+      console.error(err);
+    }
+  }
+
+  cargarDatos();
+  setInterval(cargarDatos, 60_000);
+</script>
+
+</body>
+</html>

@@ -1,0 +1,79 @@
+name: Actualizar datos AIS
+
+on:
+  schedule:
+    # cada 10 minutos. Ajustá el intervalo si querés más/menos frecuencia
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}  # permite correrlo manualmente desde la pestaña Actions
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Si vas a commitear a UNA REPO SEPARADA de datos (opción "intermedia"
+      # del chat), reemplazá este checkout por uno apuntando a esa repo,
+      # usando un token con permiso de escritura guardado como secret:
+      #
+      # - uses: actions/checkout@v4
+      #   with:
+      #     repository: TU_USUARIO/ais-data
+      #     token: ${{ secrets.DATA_REPO_TOKEN }}
+
+      - name: Descargar y combinar JSONs
+        run: |
+          mkdir -p data
+          python3 - <<'EOF'
+          import json
+          import urllib.request
+          import datetime
+
+          fuentes = {
+              "SanLorenzo": "https://hidrografia.agpse.gob.ar/mapa/AIS_SanLorenzo.json",
+              "Rosario":    "https://hidrografia.agpse.gob.ar/mapa/AIS_Rosario.json",
+              "DelGuazu":   "https://hidrografia.agpse.gob.ar/mapa/AIS_DelGuazu.json",
+              "Braga":      "https://hidrografia.agpse.gob.ar/mapa/AIS_Braga.json",
+              "BellaVista": "https://hidrografia.agpse.gob.ar/mapa/AIS_BellaVista.json",
+          }
+
+          combinado = {
+              "actualizado": datetime.datetime.utcnow().isoformat() + "Z",
+              "zonas": {}
+          }
+
+          req_headers = {"User-Agent": "Mozilla/5.0 (compatible; AIS-map-updater/1.0)"}
+
+          for nombre, url in fuentes.items():
+              try:
+                  req = urllib.request.Request(url, headers=req_headers)
+                  with urllib.request.urlopen(req, timeout=20) as resp:
+                      data = json.loads(resp.read().decode("utf-8"))
+                  combinado["zonas"][nombre] = data
+              except Exception as e:
+                  print(f"Error bajando {nombre}: {e}")
+                  # si falla, guardamos lo que había en la corrida anterior si existe
+                  try:
+                      with open("data/latest.json", encoding="utf-8") as f:
+                          anterior = json.load(f)
+                      combinado["zonas"][nombre] = anterior.get("zonas", {}).get(nombre, {"error": str(e)})
+                  except Exception:
+                      combinado["zonas"][nombre] = {"error": str(e)}
+
+          with open("data/latest.json", "w", encoding="utf-8") as f:
+              json.dump(combinado, f, ensure_ascii=False)
+
+          print("OK, escrito data/latest.json")
+          EOF
+
+      - name: Commit y push si cambió algo
+        run: |
+          git config user.name "ais-bot"
+          git config user.email "ais-bot@users.noreply.github.com"
+          git add data/latest.json
+          git diff --staged --quiet || git commit -m "Actualiza datos AIS $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          git push
