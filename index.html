@@ -2,74 +2,233 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AIS Paraná - Tránsito de buques</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PRIHA - Tránsito AIS Paraná</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=Teko:wght@500;700&family=Uncial+Antiqua&display=swap" rel="stylesheet">
 <style>
-  :root{
-    --bg: #0b1620;
-    --panel: #10202c;
-    --line: #1f3441;
-    --text: #d8e6ee;
-    --muted: #7f9aab;
-    --accent: #2fb6c9;
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Montserrat',sans-serif;background:#0f172a;color:#f8fafc;height:100vh;overflow:hidden;display:flex}
+
+  /* SIDEBAR */
+  .sidebar{width:360px;background:rgba(15,23,42,0.98);border-right:1px solid rgba(255,255,255,0.1);
+    display:flex;flex-direction:column;z-index:2000;overflow-y:auto}
+  .sidebar-header{padding:12px 10px;background:#AFBC88;text-align:center;color:#0f172a;border-bottom:4px solid #80A162}
+  .sidebar-header img{max-width:100%;max-height:48px;object-fit:contain;mix-blend-mode:multiply;margin-bottom:5px}
+  .sidebar-header img.hidden{display:none}
+  h1{font-family:'Teko',sans-serif;font-size:1.7rem;margin:0;line-height:1;letter-spacing:.02em}
+  .subtitulo{font-family:'Uncial Antiqua',serif;color:#2e4418;font-size:0.8rem;margin-top:2px}
+
+  .content{padding:12px 15px;flex:1;display:flex;flex-direction:column}
+  .section-title{font-size:0.65rem;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;
+    margin:10px 0 4px;font-weight:600}
+
+  .updated{font-size:0.7rem;color:#94a3b8;margin-bottom:6px}
+  #status{font-size:0.7rem;color:#94a3b8;margin-top:4px}
+  #status.error{color:#ef4444}
+
+  .btn-container{display:flex;gap:10px;margin:8px 0}
+  .btn-reset,.btn-metodologia{width:100%;padding:8px;background:#334155;color:#fff;border:none;
+    border-radius:8px;cursor:pointer;text-transform:uppercase;font-size:0.7rem;font-weight:600;
+    letter-spacing:.5px;transition:.2s}
+  .btn-metodologia{background:#475569}
+  .btn-reset:hover{background:#1e293b}
+  .btn-metodologia:hover{background:#64748b}
+  .btn-fuente{display:block;width:100%;padding:10px;margin-top:auto;background:#80A162;color:#fff;
+    text-align:center;text-decoration:none;border-radius:8px;font-family:'Teko',sans-serif;
+    font-size:1.1rem;letter-spacing:1px;text-transform:uppercase}
+
+  /* LAYER DROPDOWN */
+  .layer-dropdown{position:relative;margin-bottom:8px}
+  .layer-dropdown-btn{width:100%;padding:10px 12px;background:#eab308;color:#0f172a;border-radius:6px;
+    border:2px solid #fde047;cursor:pointer;text-align:left;display:flex;justify-content:space-between;
+    align-items:center;font-family:'Montserrat',sans-serif;font-size:0.78rem;font-weight:700;
+    text-transform:uppercase;transition:background .2s;box-shadow:0 0 10px rgba(234,179,8,.3)}
+  .layer-dropdown-btn:hover{background:#facc15}
+  .layer-dropdown-content{display:none;flex-direction:column;gap:8px;padding-top:10px}
+  .layer-dropdown-content.show{display:flex}
+  .layer-dropdown-content label{display:flex;align-items:center;gap:8px;font-size:0.78rem;
+    color:#f8fafc;cursor:pointer;margin:0}
+  .layer-dropdown-content input[type=checkbox]{cursor:pointer;accent-color:#80A162;width:14px;height:14px;margin:0}
+  .subcapas{display:flex;flex-direction:column;gap:3px;margin-left:6px;padding-left:10px;
+    border-left:2px solid rgba(255,255,255,.08)}
+
+  /* MODAL */
+  .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:3000;display:none;
+    justify-content:center;align-items:center;padding:20px}
+  .modal-content{background:#1e293b;padding:25px;border-radius:12px;border:1px solid #80A162;
+    max-width:560px;width:100%;color:#e2e8f0;position:relative;max-height:90vh;overflow-y:auto}
+  .modal-close{position:absolute;top:10px;right:15px;background:none;border:none;color:#94a3b8;
+    font-size:1.5rem;cursor:pointer}
+  .modal-title{font-family:'Teko',sans-serif;font-size:1.8rem;color:#80A162;margin-bottom:15px;line-height:1}
+  .modal-text{font-size:0.85rem;line-height:1.55;color:#cbd5e1}
+  .modal-text p{margin-bottom:10px}
+  .modal-text b{color:#fde047}
+
+  /* LEGEND */
+  .legend-box{padding:8px 10px;background:rgba(0,0,0,.2);border-radius:6px;margin-bottom:8px}
+  .legend-title{font-size:0.62rem;color:#cbd5e1;text-transform:uppercase;letter-spacing:.05em;
+    margin-bottom:4px;font-weight:600;border-bottom:1px solid rgba(255,255,255,.1);padding-bottom:2px}
+  .legend-item{display:flex;align-items:center;gap:6px;margin-bottom:2px;font-size:0.68rem}
+  .color-dot{width:9px;height:9px;border-radius:50%;border:1px solid rgba(0,0,0,.4);flex-shrink:0}
+  .color-sq{width:9px;height:9px;border-radius:2px;border:1px solid rgba(0,0,0,.4);flex-shrink:0}
+  .line-sample{width:16px;height:0;border-top:2px dashed;flex-shrink:0}
+
+  /* MAP */
+  #map{flex:1;position:relative}
+  .leaflet-popup-content-wrapper{background:#1e293b;color:#e2e8f0;border-radius:8px}
+  .leaflet-popup-tip{background:#1e293b}
+  .popup-title{font-family:'Teko',sans-serif;font-size:1.15rem;color:#E7D58A;margin-bottom:4px;line-height:1}
+  .popup-row{font-size:0.75rem;color:#cbd5e1}
+  .popup-row b{color:#94a3b8;font-weight:500}
+
+  /* LOADING */
+  #loading-overlay{position:fixed;inset:0;background:rgba(15,23,42,.95);z-index:9999;display:flex;
+    flex-direction:column;justify-content:center;align-items:center;transition:opacity .5s ease}
+  #loading-overlay.fade-out{opacity:0;pointer-events:none}
+  .loading-spinner{width:46px;height:46px;border:4px solid #334155;border-top-color:#80A162;
+    border-radius:50%;animation:spin 1s linear infinite}
+  .loading-text{font-family:'Teko',sans-serif;font-size:1.4rem;color:#80A162;margin-top:14px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  @media(max-width:768px){
+    body{flex-direction:column}
+    .sidebar{width:100%;order:1;max-height:45vh}
+    #map{order:2;flex:1;min-height:55vh}
   }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-
-  #map { position: absolute; inset: 0; }
-
-  #panel {
-    position: absolute; top: 12px; left: 12px; z-index: 1000;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; min-width: 240px; max-height: calc(100% - 24px); overflow-y: auto;
-    box-shadow: 0 6px 20px rgba(0,0,0,.35);
-  }
-  #panel h1 { font-size: 14px; margin: 0 0 8px; letter-spacing: .02em; color: var(--text); }
-  #panel .updated { font-size: 11px; color: var(--muted); margin-bottom: 10px; }
-  #panel .section-title { font-size: 11px; text-transform: uppercase; letter-spacing: .06em;
-    color: var(--muted); margin: 10px 0 4px; }
-  #panel label { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; cursor: pointer; }
-  #panel input[type=checkbox] { accent-color: var(--accent); }
-  #status { font-size: 11px; color: var(--muted); margin-top: 10px; }
-  #status.error { color: #e0847a; }
-
-  .leaflet-popup-content-wrapper { background: var(--panel); color: var(--text); border-radius: 8px; }
-  .leaflet-popup-tip { background: var(--panel); }
-  .popup-title { font-weight: 600; margin-bottom: 4px; font-size: 13px; }
-  .popup-sub { font-size: 11px; color: var(--muted); margin-bottom: 6px; }
-  .popup-row { font-size: 12px; color: var(--text); }
-  .popup-row b { color: var(--muted); font-weight: 500; }
 </style>
 </head>
 <body>
 
-<div id="panel">
-  <h1>Tránsito AIS · Paraná</h1>
-  <div class="updated" id="updated">Cargando datos…</div>
-
-  <div class="section-title">Zonas</div>
-  <div id="filters-zonas"></div>
-
-  <div class="section-title">Tipo de objetivo</div>
-  <label><input type="checkbox" id="chk-buques" checked> Buques</label>
-  <label><input type="checkbox" id="chk-atones" checked> Balizas / AtoN</label>
-  <label><input type="checkbox" id="chk-bases" checked> Estaciones base</label>
-
-  <div class="section-title">Capas de referencia</div>
-  <label><input type="checkbox" id="chk-puertos" checked> ⚓ Puertos</label>
-  <label><input type="checkbox" id="chk-rios" checked> Cursos de agua</label>
-  <label><input type="checkbox" id="chk-limprov" checked> Límites provinciales</label>
-  <label><input type="checkbox" id="chk-limintl" checked> Límites internacionales</label>
-
-  <div id="status"></div>
+<div id="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Cargando mapa...</div>
 </div>
+
+<div id="modal-metodologia" class="modal-overlay">
+  <div class="modal-content">
+    <button class="modal-close" onclick="toggleModal()">&#215;</button>
+    <div class="modal-title">Metodología y fuentes</div>
+    <div class="modal-text">
+      <p><b>Tránsito de buques (AIS):</b> se descarga cada 10 minutos desde los
+      endpoints públicos de la Administración General de Puertos S.E. (AGP SE)
+      para las 5 zonas del Paraná monitoreadas: San Lorenzo, Rosario, Del Guazú,
+      Braga y Bella Vista. Los datos vienen en formato AIS crudo (protocolo
+      ITU-R M.1371); las coordenadas se decodifican dividiendo por 600.000
+      (estándar de 1/10000 de minuto).</p>
+      <p><b>Puertos:</b> catálogo af_ha010 "Puerto Fluvial Sudamérica",
+      filtrado a instalaciones argentinas dentro del tramo cubierto por el mapa.
+      El color indica el <b>uso</b> declarado (público / privado / mixto).</p>
+      <p><b>Cursos de agua y límites jurisdiccionales:</b> capas oficiales del
+      Instituto Geográfico Nacional (IGN) — ríos y arroyos del delta, límites
+      interprovinciales e internacional Argentina-Uruguay — recortadas a la
+      zona de interés y simplificadas para que el mapa cargue liviano.</p>
+      <p><b>Base cartográfica:</b> Carto Dark Matter por defecto, con la
+      posibilidad de superponer el ArgenMap Oscuro del IGN (WMS/TMS oficial).</p>
+      <p style="color:#94a3b8;font-size:0.75rem;">Esta es una visualización
+      con fines informativos; no reemplaza cartas náuticas ni fuentes
+      oficiales de navegación. Los datos AIS pueden tener demoras o vacíos
+      según cobertura de antena.</p>
+    </div>
+  </div>
+</div>
+
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <img src="logo_priha.jpg" alt="PRIHA" onerror="this.classList.add('hidden')">
+    <div>
+      <h1>TRÁNSITO AIS · PARANÁ</h1>
+      <p class="subtitulo">Observatorio Fluvial</p>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="updated" id="updated">Cargando datos…</div>
+
+    <div class="btn-container">
+      <button id="btn-reset" class="btn-reset">Restablecer vista</button>
+      <button class="btn-metodologia" onclick="toggleModal()">Metodología</button>
+    </div>
+
+    <div class="layer-dropdown">
+      <button class="layer-dropdown-btn" id="layer-btn">
+        <span>Seleccionar capas</span>
+        <span id="layer-arrow" style="transition:.3s;">&#9660;</span>
+      </button>
+      <div class="layer-dropdown-content show" id="layer-content">
+
+        <div class="section-title">Zonas AIS</div>
+        <div id="filters-zonas" class="subcapas"></div>
+
+        <div class="section-title">Tipo de objetivo</div>
+        <div class="subcapas">
+          <label><input type="checkbox" id="chk-buques" checked> Buques</label>
+          <label><input type="checkbox" id="chk-atones" checked> Balizas / AtoN</label>
+          <label><input type="checkbox" id="chk-bases" checked> Estaciones base</label>
+        </div>
+
+        <div class="section-title">Capas de referencia</div>
+        <div class="subcapas">
+          <label><input type="checkbox" id="chk-puertos" checked> Puertos</label>
+          <label><input type="checkbox" id="chk-rios" checked> Cursos de agua</label>
+          <label><input type="checkbox" id="chk-limprov" checked> Límites provinciales</label>
+          <label><input type="checkbox" id="chk-limintl" checked> Límites internacionales</label>
+        </div>
+
+        <div class="section-title">Base cartográfica</div>
+        <div class="subcapas">
+          <label><input type="checkbox" id="chk-argenmap"> ArgenMap Oscuro (IGN)</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend-box">
+      <div class="legend-title">Puertos según uso</div>
+      <div class="legend-item"><div class="color-dot" style="background:#588157"></div> Público</div>
+      <div class="legend-item"><div class="color-dot" style="background:#ef4444"></div> Privado</div>
+      <div class="legend-item"><div class="color-dot" style="background:#eab308"></div> Mixto</div>
+    </div>
+
+    <div class="legend-box">
+      <div class="legend-title">Objetivos AIS</div>
+      <div class="legend-item"><div class="color-dot" style="background:#2fb6c9"></div> Buque (color = zona)</div>
+      <div class="legend-item"><div class="color-sq" style="background:#2fb6c9;transform:rotate(45deg)"></div> Baliza / AtoN</div>
+      <div class="legend-item"><div class="color-sq" style="background:#2fb6c9"></div> Estación base</div>
+    </div>
+
+    <div class="legend-box">
+      <div class="legend-title">Referencia geográfica</div>
+      <div class="legend-item"><div class="color-sq" style="background:#7f1d1d"></div> Cursos de agua</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#94a3b8"></div> Límite provincial</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#e0847a"></div> Límite internacional</div>
+    </div>
+
+    <div id="status"></div>
+
+    <a href="https://hidrografia.agpse.gob.ar/" target="_blank" class="btn-fuente">Ver fuente AGPSE</a>
+  </div>
+</aside>
 
 <div id="map"></div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+  function toggleModal() {
+    const modal = document.getElementById("modal-metodologia");
+    modal.style.display = (modal.style.display === "flex") ? "none" : "flex";
+  }
+  window.toggleModal = toggleModal;
+  document.getElementById("modal-metodologia").onclick = function (e) {
+    if (e.target === this) toggleModal();
+  };
+
+  document.getElementById("layer-btn").onclick = function () {
+    const content = document.getElementById("layer-content");
+    const arrow = document.getElementById("layer-arrow");
+    content.classList.toggle("show");
+    arrow.style.transform = content.classList.contains("show") ? "rotate(180deg)" : "rotate(0deg)";
+  };
+
   // ---------- Config ----------
   const DATA_URL = "data/latest.json";
   const ESCALA = 600000; // AIS: 1/10000 de minuto => grados = valor / 600000
@@ -84,19 +243,32 @@
 
   const TYPE_LABEL = { 0: "Buque", 1: "Buque", 3: "Estación base", 4: "Baliza / AtoN" };
 
-  // Colores por tipo de puerto
-  const PUERTO_COLOR = { Industrial: "#d99a2b", Comercial: "#2fa7c9" };
-  const PUERTO_COLOR_DEFAULT = "#9aa8b0";
+  // Colores de puertos por USO (antes era por tipo)
+  const USO_COLOR = { "Público": "#588157", "Privado": "#ef4444", "Mixto": "#eab308" };
+  const USO_COLOR_DEFAULT = "#94a3b8";
 
-  const map = L.map("map", { zoomControl: true }).setView([-32.75, -60.7], 10);
+  const DEFAULT_CENTER = [-32.75, -60.7];
+  const DEFAULT_ZOOM = 10;
+  const map = L.map("map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+  const baseCarto = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 18,
   }).addTo(map);
 
-  const zoneLayerGroups = {};   // nombreZona -> L.LayerGroup (todos los marcadores de esa zona)
-  let markersMeta = [];         // { marker, zona, tipo } para aplicar filtros combinados
+  // ArgenMap Oscuro (IGN) - TMS, por eso {-y} y NO tms:true (evita doble flip)
+  const argenmapOscuro = L.tileLayer(
+    "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png",
+    { attribution: "&copy; IGN Argentina", minZoom: 1, maxZoom: 18 }
+  );
+
+  document.getElementById("chk-argenmap").addEventListener("change", function () {
+    if (this.checked) argenmapOscuro.addTo(map);
+    else map.removeLayer(argenmapOscuro);
+  });
+
+  const zoneLayerGroups = {};
+  let markersMeta = [];
 
   function escapeHtml(str) {
     return String(str ?? "").replace(/[&<>"']/g, c => ({
@@ -126,7 +298,6 @@
   }
 
   function iconoPara(tipo, color) {
-    // buques: círculo | AtoN: rombo | bases: cuadrado
     if (tipo === 4) {
       return L.divIcon({
         className: "",
@@ -141,12 +312,11 @@
         iconSize: [9, 9],
       });
     }
-    return null; // buques usan circleMarker
+    return null;
   }
 
-  function iconoPuerto(tipo) {
-    const color = PUERTO_COLOR[tipo] || PUERTO_COLOR_DEFAULT;
-    // Ancla simple en SVG, más grande y reconocible que los puntos AIS
+  function iconoPuerto(uso) {
+    const color = USO_COLOR[uso] || USO_COLOR_DEFAULT;
     const svgAncla = `
       <svg width="20" height="20" viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="11" fill="${color}" stroke="#06222b" stroke-width="1.5"/>
@@ -177,7 +347,7 @@
       const puertos = await cargarCapaGeoJSON("data/puertos.geojson");
       L.geoJSON(puertos, {
         pointToLayer: (feature, latlng) =>
-          L.marker(latlng, { icon: iconoPuerto(feature.properties.tipo) }),
+          L.marker(latlng, { icon: iconoPuerto(feature.properties.uso) }),
         onEachFeature: (feature, layer) => {
           const p = feature.properties;
           layer.bindPopup(
@@ -191,8 +361,9 @@
 
     try {
       const rios = await cargarCapaGeoJSON("data/rios.geojson");
+      // Cursos de agua en tono rojizo (a pedido, en vez del celeste convencional)
       L.geoJSON(rios, {
-        style: { color: "#2fb6c9", weight: 0.6, opacity: 0.35, fillColor: "#123b4d", fillOpacity: 0.35 },
+        style: { color: "#ef4444", weight: 0.6, opacity: 0.4, fillColor: "#7f1d1d", fillOpacity: 0.4 },
         onEachFeature: (feature, layer) => {
           const nombre = feature.properties.fna || feature.properties.objeto || "Curso de agua";
           layer.bindPopup(`<div class="popup-title">${escapeHtml(nombre)}</div>`);
@@ -204,7 +375,7 @@
     try {
       const limProv = await cargarCapaGeoJSON("data/limites_provinciales.geojson");
       L.geoJSON(limProv, {
-        style: { color: "#7f9aab", weight: 1, opacity: 0.55, dashArray: "4,4" },
+        style: { color: "#94a3b8", weight: 1, opacity: 0.55, dashArray: "4,4" },
         onEachFeature: (feature, layer) => {
           layer.bindPopup(`<div class="popup-title">${escapeHtml(feature.properties.gna || feature.properties.fna)}</div>`);
         },
@@ -306,6 +477,10 @@
     document.getElementById(id).addEventListener("change", aplicarFiltros)
   );
 
+  document.getElementById("btn-reset").onclick = () => {
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  };
+
   async function cargarDatos() {
     const statusEl = document.getElementById("status");
     const updatedEl = document.getElementById("updated");
@@ -343,6 +518,10 @@
       statusEl.className = "error";
       statusEl.textContent = "Error cargando datos: " + err.message;
       console.error(err);
+    } finally {
+      const overlay = document.getElementById("loading-overlay");
+      overlay.classList.add("fade-out");
+      setTimeout(() => overlay.style.display = "none", 500);
     }
   }
 
