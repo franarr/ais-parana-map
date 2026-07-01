@@ -262,29 +262,67 @@ function edadTexto(seg) {
    Genera el HTML para mostrar en el panel de detalle
    (Propuesta E: bottom sheet en vez de popup flotante).
    ══════════════════════════════════════════ */
+function getCountryByMMSI(mmsi) {
+  if (!mmsi) return 'Desconocido';
+  const mid = String(mmsi).substring(0, 3);
+  const flags = {
+    '701': '🇦🇷 Argentina',
+    '755': '🇵🇾 Paraguay',
+    '720': '🇧🇴 Bolivia',
+    '714': '🇧🇷 Brasil',
+    '770': '🇺🇾 Uruguay',
+    '370': '🇵🇦 Panamá', '371': '🇵🇦 Panamá', '372': '🇵🇦 Panamá',
+    '351': '🇵🇦 Panamá', '352': '🇵🇦 Panamá', '353': '🇵🇦 Panamá',
+    '354': '🇵🇦 Panamá', '355': '🇵🇦 Panamá', '356': '🇵🇦 Panamá',
+    '357': '🇵🇦 Panamá', '636': '🇱🇷 Liberia', '538': '🇲🇭 Islas Marshall'
+  };
+  return flags[mid] || `MID: ${mid}`;
+}
+
 function detailHTML(mmsi, tgt) {
   const nombre = tgt.n?.trim() || `MMSI ${mmsi}`;
   const tipo   = TYPE_LABEL[tgt.t] || `Tipo ${tgt.t}`;
-  const rows   = [];
+  const pais   = getCountryByMMSI(mmsi);
+  
+  // Endpoint de fotos (si falla, muestra un placeholder)
+  const photoUrl = `https://photos.marinetraffic.com/ais/showphoto.aspx?mmsi=${mmsi}`;
+  const vfLink = `https://www.vesselfinder.com/vessels/details/${mmsi}`;
 
-  rows.push(`<div class="popup-row"><b>MMSI</b>: ${escapeHtml(mmsi)}</div>`);
-  rows.push(`<div class="popup-row"><b>Tipo</b>: ${escapeHtml(tipo)}</div>`);
+  const html = `
+    <div class="ficha-header">
+      <h2 class="ficha-title">${escapeHtml(nombre)}</h2>
+      <div class="ficha-subtitle">${escapeHtml(tipo)} &nbsp;&middot;&nbsp; ${pais}</div>
+    </div>
+    
+    <div class="ficha-photo">
+      <img src="${photoUrl}" alt="Foto de ${escapeHtml(nombre)}" onerror="this.src='https://via.placeholder.com/600x300/12140f/80a162?text=Sin+Foto+Disponible'">
+    </div>
 
-  if (tgt.s !== undefined)
-    rows.push(`<div class="popup-row"><b>Velocidad</b>: ${(tgt.s / 10).toFixed(1)} nudos</div>`);
+    <div class="ficha-grid">
+      <div class="ficha-stat">
+        <span class="stat-lbl">MMSI</span>
+        <span class="stat-val">${escapeHtml(mmsi)}</span>
+      </div>
+      <div class="ficha-stat">
+        <span class="stat-lbl">Velocidad</span>
+        <span class="stat-val">${tgt.s !== undefined ? (tgt.s / 10).toFixed(1) + ' nds' : '-'}</span>
+      </div>
+      <div class="ficha-stat">
+        <span class="stat-lbl">Rumbo</span>
+        <span class="stat-val">${tgt.c !== undefined ? (tgt.c / 10).toFixed(1) + '&deg;' : '-'}</span>
+      </div>
+      <div class="ficha-stat">
+        <span class="stat-lbl">Última Señal</span>
+        <span class="stat-val">${tgt.a !== undefined ? edadTexto(tgt.a) : '-'}</span>
+      </div>
+    </div>
 
-  if (tgt.c !== undefined)
-    rows.push(`<div class="popup-row"><b>Rumbo (COG)</b>: ${(tgt.c / 10).toFixed(1)}&deg;</div>`);
-
-  if (tgt.a !== undefined)
-    rows.push(`<div class="popup-row"><b>Última señal</b>: ${edadTexto(tgt.a)}</div>`);
-
-  if (tgt._zona)
-    rows.push(`<div class="popup-row"><b>Radar</b>: ${escapeHtml(tgt._zona)}</div>`);
-
-  return `<div class="popup-title">${escapeHtml(nombre)}</div>${rows.join('')}`;
+    <a href="${vfLink}" target="_blank" rel="noopener noreferrer" class="ficha-btn-external">
+      Ver Ficha Completa &rarr;
+    </a>
+  `;
+  return html;
 }
-
 
 /* ══════════════════════════════════════════
    10. CARGA DE CAPAS DE REFERENCIA (preservado del original)

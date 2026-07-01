@@ -583,6 +583,18 @@ body {
 .detail-content {
   padding: 16px;
 }
+.ficha-header { margin-bottom: 16px; }
+.ficha-title { font-size: 1.5rem; font-family: 'Teko', sans-serif; color: var(--c-accent-light); margin-bottom: 2px; text-transform: uppercase; line-height: 1.1; }
+.ficha-subtitle { font-size: 0.75rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+.ficha-photo { width: 100%; height: 180px; border-radius: var(--radius-md); overflow: hidden; margin-bottom: 20px; background: rgba(0,0,0,0.2); }
+.ficha-photo img { width: 100%; height: 100%; object-fit: cover; }
+.ficha-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+.ficha-stat { display: flex; flex-direction: column; background: rgba(255,255,255,0.04); padding: 10px; border-radius: var(--radius-sm); border: 1px solid rgba(255,255,255,0.06); }
+.ficha-stat .stat-lbl { font-size: 0.65rem; color: var(--c-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+.ficha-stat .stat-val { font-size: 0.95rem; font-weight: 600; color: var(--c-text); }
+.ficha-btn-external { display: block; width: 100%; text-align: center; padding: 12px; background: var(--c-accent); color: #12140f; border-radius: var(--radius-md); font-weight: 600; text-decoration: none; transition: background 0.2s, transform 0.1s; }
+.ficha-btn-external:hover { background: var(--c-accent-light); }
+.ficha-btn-external:active { transform: scale(0.98); }
 
 /* ── Panel de metodología ── */
 .metodologia-title {
