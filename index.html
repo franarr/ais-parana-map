@@ -123,8 +123,8 @@
       Instituto Geográfico Nacional (IGN) — ríos y arroyos del delta, límites
       interprovinciales e internacional Argentina-Uruguay — recortadas a la
       zona de interés y simplificadas para que el mapa cargue liviano.</p>
-      <p><b>Base cartográfica:</b> Carto Dark Matter por defecto, con la
-      posibilidad de superponer el ArgenMap Oscuro del IGN (WMS/TMS oficial).</p>
+      <p><b>Base cartográfica:</b> ArgenMap Oscuro del Instituto Geográfico
+      Nacional (IGN), como fondo estándar del mapa.</p>
       <p style="color:#94a3b8;font-size:0.75rem;">Esta es una visualización
       con fines informativos; no reemplaza cartas náuticas ni fuentes
       oficiales de navegación. Los datos AIS pueden tener demoras o vacíos
@@ -157,9 +157,6 @@
       </button>
       <div class="layer-dropdown-content show" id="layer-content">
 
-        <div class="section-title">Zonas AIS</div>
-        <div id="filters-zonas" class="subcapas"></div>
-
         <div class="section-title">Tipo de objetivo</div>
         <div class="subcapas">
           <label><input type="checkbox" id="chk-buques" checked> Buques</label>
@@ -175,9 +172,14 @@
           <label><input type="checkbox" id="chk-limintl" checked> Límites internacionales</label>
         </div>
 
-        <div class="section-title">Base cartográfica</div>
+        <div class="section-title">Contexto nacional (costa)</div>
         <div class="subcapas">
-          <label><input type="checkbox" id="chk-argenmap"> ArgenMap Oscuro (IGN)</label>
+          <label><input type="checkbox" id="chk-marterr"> Mar territorial</label>
+          <label><input type="checkbox" id="chk-zee"> Zona económica exclusiva</label>
+        </div>
+        <div style="font-size:0.6rem;color:#94a3b8;margin-top:2px;">
+          Solo se ven alejando el zoom hacia la costa atlántica — no tocan
+          este tramo del río.
         </div>
       </div>
     </div>
@@ -191,16 +193,20 @@
 
     <div class="legend-box">
       <div class="legend-title">Objetivos AIS</div>
-      <div class="legend-item"><div class="color-dot" style="background:#2fb6c9"></div> Buque (color = zona)</div>
-      <div class="legend-item"><div class="color-sq" style="background:#2fb6c9;transform:rotate(45deg)"></div> Baliza / AtoN</div>
-      <div class="legend-item"><div class="color-sq" style="background:#2fb6c9"></div> Estación base</div>
+      <div class="legend-item"><div class="color-dot" style="background:#2fb6c9"></div> Buque</div>
+      <div class="legend-item"><div class="color-sq" style="background:#eab308;transform:rotate(45deg)"></div> Baliza / AtoN</div>
+      <div class="legend-item"><div class="color-sq" style="background:#8f2fc9"></div> Estación base</div>
+      <div style="font-size:0.62rem;color:#94a3b8;margin-top:4px;">El radar que recibió cada
+      señal figura en su popup (un buque visto por varios radares muestra solo el reporte más reciente).</div>
     </div>
 
     <div class="legend-box">
       <div class="legend-title">Referencia geográfica</div>
       <div class="legend-item"><div class="color-sq" style="background:#7f1d1d"></div> Cursos de agua</div>
-      <div class="legend-item"><div class="line-sample" style="border-color:#94a3b8"></div> Límite provincial</div>
-      <div class="legend-item"><div class="line-sample" style="border-color:#e0847a"></div> Límite internacional</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#f8fafc"></div> Límite provincial</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#eab308"></div> Límite internacional</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#38bdf8"></div> Mar territorial</div>
+      <div class="legend-item"><div class="line-sample" style="border-color:#a855f7"></div> ZEE</div>
     </div>
 
     <div id="status"></div>
@@ -233,15 +239,14 @@
   const DATA_URL = "data/latest.json";
   const ESCALA = 600000; // AIS: 1/10000 de minuto => grados = valor / 600000
 
-  const ZONE_COLORS = {
-    SanLorenzo: "#2fb6c9",
-    Rosario: "#c98f2f",
-    DelGuazu: "#8f2fc9",
-    Braga: "#2fc95a",
-    BellaVista: "#c92f5a",
-  };
-
   const TYPE_LABEL = { 0: "Buque", 1: "Buque", 3: "Estación base", 4: "Baliza / AtoN" };
+
+  // Colores por TIPO de objetivo (ya no por zona: un mismo buque puede
+  // aparecer en varios radares, y no tiene sentido mostrarlo varias veces
+  // ni pintarlo distinto según cuál lo vio)
+  const COLOR_BUQUE = "#2fb6c9";
+  const COLOR_ATON = "#eab308";
+  const COLOR_BASE = "#8f2fc9";
 
   // Colores de puertos por USO (antes era por tipo)
   const USO_COLOR = { "Público": "#588157", "Privado": "#ef4444", "Mixto": "#eab308" };
@@ -251,23 +256,13 @@
   const DEFAULT_ZOOM = 10;
   const map = L.map("map", { zoomControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
-  const baseCarto = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; OpenStreetMap &copy; CARTO',
-    maxZoom: 18,
-  }).addTo(map);
-
-  // ArgenMap Oscuro (IGN) - TMS, por eso {-y} y NO tms:true (evita doble flip)
-  const argenmapOscuro = L.tileLayer(
+  // ArgenMap Oscuro (IGN) es el fondo estándar del mapa (no una capa togglable).
+  // TMS, por eso {-y} y NO tms:true (evita doble flip).
+  L.tileLayer(
     "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png",
     { attribution: "&copy; IGN Argentina", minZoom: 1, maxZoom: 18 }
-  );
+  ).addTo(map);
 
-  document.getElementById("chk-argenmap").addEventListener("change", function () {
-    if (this.checked) argenmapOscuro.addTo(map);
-    else map.removeLayer(argenmapOscuro);
-  });
-
-  const zoneLayerGroups = {};
   let markersMeta = [];
 
   function escapeHtml(str) {
@@ -294,21 +289,22 @@
     if (tgt.s !== undefined) filas.push(`<div class="popup-row"><b>Velocidad</b>: ${(tgt.s / 10).toFixed(1)} nudos</div>`);
     if (tgt.c !== undefined) filas.push(`<div class="popup-row"><b>Rumbo</b>: ${(tgt.c / 10).toFixed(1)}°</div>`);
     if (tgt.a !== undefined) filas.push(`<div class="popup-row"><b>Última señal</b>: ${edadTexto(tgt.a)}</div>`);
+    if (tgt._zona) filas.push(`<div class="popup-row"><b>Radar</b>: ${escapeHtml(tgt._zona)}</div>`);
     return `<div class="popup-title">${escapeHtml(nombre)}</div>${filas.join("")}`;
   }
 
-  function iconoPara(tipo, color) {
+  function iconoPara(tipo) {
     if (tipo === 4) {
       return L.divIcon({
         className: "",
-        html: `<div style="width:10px;height:10px;background:${color};transform:rotate(45deg);border:1.5px solid #06222b;"></div>`,
+        html: `<div style="width:10px;height:10px;background:${COLOR_ATON};transform:rotate(45deg);border:1.5px solid #06222b;"></div>`,
         iconSize: [10, 10],
       });
     }
     if (tipo === 3) {
       return L.divIcon({
         className: "",
-        html: `<div style="width:9px;height:9px;background:${color};border:1.5px solid #06222b;"></div>`,
+        html: `<div style="width:9px;height:9px;background:${COLOR_BASE};border:1.5px solid #06222b;"></div>`,
         iconSize: [9, 9],
       });
     }
@@ -335,6 +331,8 @@
   const capaRios = L.layerGroup();
   const capaLimitesProv = L.layerGroup();
   const capaLimitesIntl = L.layerGroup();
+  const capaMarTerr = L.layerGroup();
+  const capaZee = L.layerGroup();
 
   async function cargarCapaGeoJSON(url) {
     const resp = await fetch(url, { cache: "force-cache" });
@@ -375,7 +373,7 @@
     try {
       const limProv = await cargarCapaGeoJSON("data/limites_provinciales.geojson");
       L.geoJSON(limProv, {
-        style: { color: "#94a3b8", weight: 1, opacity: 0.55, dashArray: "4,4" },
+        style: { color: "#f8fafc", weight: 1.8, opacity: 0.85, dashArray: "5,5" },
         onEachFeature: (feature, layer) => {
           layer.bindPopup(`<div class="popup-title">${escapeHtml(feature.properties.gna || feature.properties.fna)}</div>`);
         },
@@ -385,14 +383,33 @@
     try {
       const limIntl = await cargarCapaGeoJSON("data/limites_internacionales.geojson");
       L.geoJSON(limIntl, {
-        style: { color: "#e0847a", weight: 1.6, opacity: 0.7, dashArray: "6,3" },
+        style: { color: "#eab308", weight: 2.4, opacity: 0.9, dashArray: "8,4" },
         onEachFeature: (feature, layer) => {
           layer.bindPopup(`<div class="popup-title">${escapeHtml(feature.properties.gna || feature.properties.fna)}</div>`);
         },
       }).addTo(capaLimitesIntl);
     } catch (e) { console.error("Error cargando límites internacionales:", e); }
 
+    // Contexto nacional: mar territorial y ZEE. No tocan el tramo del río,
+    // solo se ven alejando el zoom hacia la costa. Apagadas por default.
+    try {
+      const marTerr = await cargarCapaGeoJSON("data/mar_territorial.geojson");
+      L.geoJSON(marTerr, {
+        style: { color: "#38bdf8", weight: 1, opacity: 0.6, fillColor: "#0ea5e9", fillOpacity: 0.12 },
+        onEachFeature: (feature, layer) => layer.bindPopup(`<div class="popup-title">Mar territorial argentino</div>`),
+      }).addTo(capaMarTerr);
+    } catch (e) { console.error("Error cargando mar territorial:", e); }
+
+    try {
+      const zee = await cargarCapaGeoJSON("data/zona_economica_exclusiva.geojson");
+      L.geoJSON(zee, {
+        style: { color: "#a855f7", weight: 1, opacity: 0.55, dashArray: "3,5", fillOpacity: 0 },
+        onEachFeature: (feature, layer) => layer.bindPopup(`<div class="popup-title">Zona económica exclusiva</div>`),
+      }).addTo(capaZee);
+    } catch (e) { console.error("Error cargando ZEE:", e); }
+
     [capaRios, capaLimitesProv, capaLimitesIntl, capaPuertos].forEach(c => c.addTo(map));
+    // Mar territorial y ZEE quedan cargadas pero OFF por default (no se agregan al mapa).
 
     document.getElementById("chk-puertos").addEventListener("change", e =>
       e.target.checked ? capaPuertos.addTo(map) : map.removeLayer(capaPuertos));
@@ -400,76 +417,78 @@
       e.target.checked ? capaRios.addTo(map) : map.removeLayer(capaRios));
     document.getElementById("chk-limprov").addEventListener("change", e =>
       e.target.checked ? capaLimitesProv.addTo(map) : map.removeLayer(capaLimitesProv));
+    document.getElementById("chk-marterr").addEventListener("change", e =>
+      e.target.checked ? capaMarTerr.addTo(map) : map.removeLayer(capaMarTerr));
+    document.getElementById("chk-zee").addEventListener("change", e =>
+      e.target.checked ? capaZee.addTo(map) : map.removeLayer(capaZee));
     document.getElementById("chk-limintl").addEventListener("change", e =>
       e.target.checked ? capaLimitesIntl.addTo(map) : map.removeLayer(capaLimitesIntl));
   }
 
   cargarCapasReferencia();
 
-  function renderZona(nombreZona, dataZona) {
-    if (zoneLayerGroups[nombreZona]) map.removeLayer(zoneLayerGroups[nombreZona]);
-    const grupo = L.layerGroup();
-    const color = ZONE_COLORS[nombreZona] || "#2fb6c9";
-    const tgts = (dataZona && dataZona.tgts) || {};
+  const capaObjetivos = L.layerGroup().addTo(map);
 
+  // Combina los tgts de las 5 zonas en un solo diccionario por MMSI, quedándose
+  // con el reporte más FRESCO (menor "a" = menos segundos desde la última señal)
+  // cuando el mismo buque es visto por más de un radar/zona.
+  function combinarPorMMSI(zonas) {
+    const combinados = {};
+    Object.entries(zonas || {}).forEach(([nombreZona, dataZona]) => {
+      const tgts = (dataZona && dataZona.tgts) || {};
+      Object.entries(tgts).forEach(([mmsi, tgt]) => {
+        if (typeof tgt.x !== "number" || typeof tgt.y !== "number") return;
+        const edadNueva = tgt.a ?? Infinity;
+        const existente = combinados[mmsi];
+        const edadExistente = existente ? (existente.a ?? Infinity) : Infinity;
+        if (!existente || edadNueva < edadExistente) {
+          combinados[mmsi] = { ...tgt, _zona: nombreZona };
+        }
+      });
+    });
+    return combinados;
+  }
+
+  function renderObjetivos(combinados) {
+    capaObjetivos.clearLayers();
+    markersMeta = [];
     let count = 0;
-    Object.entries(tgts).forEach(([mmsi, tgt]) => {
-      if (typeof tgt.x !== "number" || typeof tgt.y !== "number") return;
+
+    Object.entries(combinados).forEach(([mmsi, tgt]) => {
       const lat = decodeCoord(tgt.y);
       const lon = decodeCoord(tgt.x);
       let marker;
 
       if (tgt.t === 3 || tgt.t === 4) {
-        marker = L.marker([lat, lon], { icon: iconoPara(tgt.t, color) });
+        marker = L.marker([lat, lon], { icon: iconoPara(tgt.t) });
       } else {
         marker = L.circleMarker([lat, lon], {
-          radius: 6, color: "#06222b", weight: 2, fillColor: color, fillOpacity: 0.9,
+          radius: 6, color: "#06222b", weight: 2, fillColor: COLOR_BUQUE, fillOpacity: 0.9,
         });
       }
       marker.bindPopup(popupHTML(mmsi, tgt));
-      grupo.addLayer(marker);
-      markersMeta.push({ marker, zona: nombreZona, tipo: tgt.t });
+      capaObjetivos.addLayer(marker);
+      markersMeta.push({ marker, tipo: tgt.t });
       count++;
     });
 
-    zoneLayerGroups[nombreZona] = grupo;
-    grupo.addTo(map);
     return count;
   }
 
-  function construirFiltrosZona(zonas) {
-    const cont = document.getElementById("filters-zonas");
-    cont.innerHTML = "";
-    Object.keys(zonas).forEach(nombreZona => {
-      const id = "chk-zona-" + nombreZona;
-      const label = document.createElement("label");
-      label.innerHTML = `<input type="checkbox" id="${id}" checked> <span style="color:${ZONE_COLORS[nombreZona] || '#fff'}">●</span> ${nombreZona}`;
-      cont.appendChild(label);
-      document.getElementById(id).addEventListener("change", aplicarFiltros);
-    });
-  }
-
   function aplicarFiltros() {
-    const zonasActivas = new Set(
-      Object.keys(zoneLayerGroups).filter(z => {
-        const chk = document.getElementById("chk-zona-" + z);
-        return chk ? chk.checked : true;
-      })
-    );
     const mostrarBuques = document.getElementById("chk-buques").checked;
     const mostrarAtones = document.getElementById("chk-atones").checked;
     const mostrarBases = document.getElementById("chk-bases").checked;
 
-    markersMeta.forEach(({ marker, zona, tipo }) => {
-      const tipoVisible =
+    markersMeta.forEach(({ marker, tipo }) => {
+      const visible =
         ((tipo === 0 || tipo === 1) && mostrarBuques) ||
         (tipo === 4 && mostrarAtones) ||
         (tipo === 3 && mostrarBases) ||
         ![0, 1, 3, 4].includes(tipo);
-      const visible = zonasActivas.has(zona) && tipoVisible;
-      const yaEnMapa = map.hasLayer(marker);
-      if (visible && !yaEnMapa) marker.addTo(map);
-      if (!visible && yaEnMapa) map.removeLayer(marker);
+      const yaEnMapa = capaObjetivos.hasLayer(marker);
+      if (visible && !yaEnMapa) capaObjetivos.addLayer(marker);
+      if (!visible && yaEnMapa) capaObjetivos.removeLayer(marker);
     });
   }
 
@@ -493,13 +512,11 @@
         ? new Date(data.actualizado).toLocaleString("es-AR")
         : "desconocida");
 
-      construirFiltrosZona(data.zonas || {});
-      markersMeta = [];
+      const combinados = combinarPorMMSI(data.zonas || {});
+      const total = renderObjetivos(combinados);
 
-      let total = 0;
       let primerCentro = null;
-      Object.entries(data.zonas || {}).forEach(([nombreZona, dataZona]) => {
-        total += renderZona(nombreZona, dataZona);
+      Object.values(data.zonas || {}).forEach(dataZona => {
         if (!primerCentro && dataZona && typeof dataZona.x === "number") {
           primerCentro = [decodeCoord(dataZona.y), decodeCoord(dataZona.x)];
         }
