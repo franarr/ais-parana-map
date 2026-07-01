@@ -719,20 +719,20 @@ body {
     --header-height: 60px; /* desktop: una sola fila brand+chips */
   }
 
-  /* Mapa: no se extiende debajo del sidebar */
+  /* Mapa: abarca el 100% de la pantalla */
   #map {
     top: 0;
-    right: var(--sidebar-w);
+    right: 0;
   }
 
   /* Header: una sola fila horizontal flotante y centrada */
   #app-header {
-    right: var(--sidebar-w);
+    right: 0;
     height: auto;
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    padding-top: 4px;
+    padding-top: 16px;
     pointer-events: none;
   }
 
@@ -748,21 +748,27 @@ body {
   /* FABs: ocultos en desktop (controles en el sidebar) */
   .fab-group { display: none; }
 
-  /* ── Bottom sheet → Sidebar fijo ── */
+  /* ── Bottom sheet → Sidebar Flotante (Glass Panel) ── */
   .bottom-sheet {
-    top: 0;
+    top: 24px;
     left: auto;
-    right: 0;
-    bottom: 0;
+    right: 24px;
+    bottom: 24px;
     width: var(--sidebar-w);
-    height: 100vh;
-    border-radius: 0;
-    border-left: 1px solid var(--c-border);
-    border-top: none;
+    height: calc(100vh - 48px);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
     overflow: visible;
     /* JS no debe aplicar transform en desktop (isDesktop() lo controla) */
     transform: none !important;
     transition: none !important;
+  }
+  
+  /* Mover el indicador "En vivo" a la izquierda del sidebar */
+  .live-indicator {
+    right: calc(var(--sidebar-w) + 48px);
+    top: 24px;
   }
 
   /* Handle: oculto en sidebar */
