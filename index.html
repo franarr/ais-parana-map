@@ -335,7 +335,7 @@
   const capaZee = L.layerGroup();
 
   async function cargarCapaGeoJSON(url) {
-    const resp = await fetch(url, { cache: "force-cache" });
+    const resp = await fetch(url, { cache: "no-store" });
     if (!resp.ok) throw new Error(`No se pudo cargar ${url}: HTTP ${resp.status}`);
     return resp.json();
   }
