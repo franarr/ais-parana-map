@@ -57,6 +57,12 @@
   <label><input type="checkbox" id="chk-atones" checked> Balizas / AtoN</label>
   <label><input type="checkbox" id="chk-bases" checked> Estaciones base</label>
 
+  <div class="section-title">Capas de referencia</div>
+  <label><input type="checkbox" id="chk-puertos" checked> ⚓ Puertos</label>
+  <label><input type="checkbox" id="chk-rios" checked> Cursos de agua</label>
+  <label><input type="checkbox" id="chk-limprov" checked> Límites provinciales</label>
+  <label><input type="checkbox" id="chk-limintl" checked> Límites internacionales</label>
+
   <div id="status"></div>
 </div>
 
@@ -77,6 +83,10 @@
   };
 
   const TYPE_LABEL = { 0: "Buque", 1: "Buque", 3: "Estación base", 4: "Baliza / AtoN" };
+
+  // Colores por tipo de puerto
+  const PUERTO_COLOR = { Industrial: "#d99a2b", Comercial: "#2fa7c9" };
+  const PUERTO_COLOR_DEFAULT = "#9aa8b0";
 
   const map = L.map("map", { zoomControl: true }).setView([-32.75, -60.7], 10);
 
@@ -133,6 +143,97 @@
     }
     return null; // buques usan circleMarker
   }
+
+  function iconoPuerto(tipo) {
+    const color = PUERTO_COLOR[tipo] || PUERTO_COLOR_DEFAULT;
+    // Ancla simple en SVG, más grande y reconocible que los puntos AIS
+    const svgAncla = `
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="11" fill="${color}" stroke="#06222b" stroke-width="1.5"/>
+        <g stroke="#06222b" stroke-width="1.6" fill="none" stroke-linecap="round">
+          <circle cx="12" cy="7" r="1.6" fill="#06222b" stroke="none"/>
+          <line x1="12" y1="8.5" x2="12" y2="18"/>
+          <path d="M7 14 a5 5 0 0 0 10 0"/>
+          <line x1="8.5" y1="10.5" x2="15.5" y2="10.5"/>
+        </g>
+      </svg>`;
+    return L.divIcon({ className: "", html: svgAncla, iconSize: [20, 20], iconAnchor: [10, 10] });
+  }
+
+  // ---------- Capas de referencia (puertos, ríos, límites) ----------
+  const capaPuertos = L.layerGroup();
+  const capaRios = L.layerGroup();
+  const capaLimitesProv = L.layerGroup();
+  const capaLimitesIntl = L.layerGroup();
+
+  async function cargarCapaGeoJSON(url) {
+    const resp = await fetch(url, { cache: "force-cache" });
+    if (!resp.ok) throw new Error(`No se pudo cargar ${url}: HTTP ${resp.status}`);
+    return resp.json();
+  }
+
+  async function cargarCapasReferencia() {
+    try {
+      const puertos = await cargarCapaGeoJSON("data/puertos.geojson");
+      L.geoJSON(puertos, {
+        pointToLayer: (feature, latlng) =>
+          L.marker(latlng, { icon: iconoPuerto(feature.properties.tipo) }),
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties;
+          layer.bindPopup(
+            `<div class="popup-title">⚓ ${escapeHtml(p.nombre)}</div>` +
+            `<div class="popup-row"><b>Tipo</b>: ${escapeHtml(p.tipo)}</div>` +
+            `<div class="popup-row"><b>Uso</b>: ${escapeHtml(p.uso)}</div>`
+          );
+        },
+      }).addTo(capaPuertos);
+    } catch (e) { console.error("Error cargando puertos:", e); }
+
+    try {
+      const rios = await cargarCapaGeoJSON("data/rios.geojson");
+      L.geoJSON(rios, {
+        style: { color: "#2fb6c9", weight: 0.6, opacity: 0.35, fillColor: "#123b4d", fillOpacity: 0.35 },
+        onEachFeature: (feature, layer) => {
+          const nombre = feature.properties.fna || feature.properties.objeto || "Curso de agua";
+          layer.bindPopup(`<div class="popup-title">${escapeHtml(nombre)}</div>`);
+        },
+      }).addTo(capaRios);
+      capaRios.eachLayer(l => l.bringToBack && l.bringToBack());
+    } catch (e) { console.error("Error cargando ríos:", e); }
+
+    try {
+      const limProv = await cargarCapaGeoJSON("data/limites_provinciales.geojson");
+      L.geoJSON(limProv, {
+        style: { color: "#7f9aab", weight: 1, opacity: 0.55, dashArray: "4,4" },
+        onEachFeature: (feature, layer) => {
+          layer.bindPopup(`<div class="popup-title">${escapeHtml(feature.properties.gna || feature.properties.fna)}</div>`);
+        },
+      }).addTo(capaLimitesProv);
+    } catch (e) { console.error("Error cargando límites provinciales:", e); }
+
+    try {
+      const limIntl = await cargarCapaGeoJSON("data/limites_internacionales.geojson");
+      L.geoJSON(limIntl, {
+        style: { color: "#e0847a", weight: 1.6, opacity: 0.7, dashArray: "6,3" },
+        onEachFeature: (feature, layer) => {
+          layer.bindPopup(`<div class="popup-title">${escapeHtml(feature.properties.gna || feature.properties.fna)}</div>`);
+        },
+      }).addTo(capaLimitesIntl);
+    } catch (e) { console.error("Error cargando límites internacionales:", e); }
+
+    [capaRios, capaLimitesProv, capaLimitesIntl, capaPuertos].forEach(c => c.addTo(map));
+
+    document.getElementById("chk-puertos").addEventListener("change", e =>
+      e.target.checked ? capaPuertos.addTo(map) : map.removeLayer(capaPuertos));
+    document.getElementById("chk-rios").addEventListener("change", e =>
+      e.target.checked ? capaRios.addTo(map) : map.removeLayer(capaRios));
+    document.getElementById("chk-limprov").addEventListener("change", e =>
+      e.target.checked ? capaLimitesProv.addTo(map) : map.removeLayer(capaLimitesProv));
+    document.getElementById("chk-limintl").addEventListener("change", e =>
+      e.target.checked ? capaLimitesIntl.addTo(map) : map.removeLayer(capaLimitesIntl));
+  }
+
+  cargarCapasReferencia();
 
   function renderZona(nombreZona, dataZona) {
     if (zoneLayerGroups[nombreZona]) map.removeLayer(zoneLayerGroups[nombreZona]);
