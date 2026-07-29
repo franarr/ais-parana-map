@@ -274,8 +274,8 @@ body {
 .fab-group {
   position: fixed;
   right: 16px;
-  /* Posiciona sobre el sheet colapsado */
-  bottom: calc(var(--sheet-bar-h) + 14px);
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   flex-direction: column;
   gap: 10px;
