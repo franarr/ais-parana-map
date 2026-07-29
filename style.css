@@ -760,12 +760,21 @@ body {
   }
 
   .header-brand {
-    margin: 4px 12px 4px 12px;
+    position: absolute;
+    left: 170px; /* Al lado del indicador "En vivo" */
+    top: 14px;
+    margin: 0;
   }
 
   .chips-bar {
     padding: 4px 12px;
     overflow: visible;
+    gap: 12px; /* Más espacio entre chips */
+  }
+
+  .chip {
+    padding: 8px 18px; /* Chips más grandes */
+    font-size: 0.85rem;
   }
 
   /* FABs: ocultos en desktop (controles en el sidebar) */
