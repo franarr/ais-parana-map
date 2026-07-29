@@ -986,19 +986,25 @@ async function cargarDatos() {
     summaryError.hidden      = false;
     console.error('Error cargando datos AIS:', err);
 
-  } finally {
-    // Ocultar loading overlay con fade (solo al primer load)
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay && !overlay.classList.contains('fade-out')) {
-      overlay.classList.add('fade-out');
-      setTimeout(() => { overlay.style.display = 'none'; }, 500);
-    }
   }
 }
 
 // Carga inicial y auto-refresco cada 5 minutos
-cargarCapasReferencia();
-cargarDatos();
+async function initApp() {
+  await Promise.all([
+    cargarCapasReferencia(),
+    cargarDatos()
+  ]);
+
+  // Ocultar loading overlay con fade al terminar todo
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay && !overlay.classList.contains('fade-out')) {
+    overlay.classList.add('fade-out');
+    setTimeout(() => { overlay.style.display = 'none'; }, 500);
+  }
+}
+
+initApp();
 setInterval(cargarDatos, 300_000);
 
 
