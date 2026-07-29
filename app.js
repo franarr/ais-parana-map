@@ -55,8 +55,7 @@ const map = L.map('map', {
   attributionControl: true,
 }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 
-// Zoom control: topleft para no quedar tapado por FABs ni el sheet
-L.control.zoom({ position: 'bottomright' }).addTo(map);
+// Zoom control removido a pedido
 
 // Atribución: mover a bottomleft (el sheet colapsado solo tapa 56px del borde inferior)
 map.attributionControl.setPosition('bottomleft');
