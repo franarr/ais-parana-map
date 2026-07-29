@@ -750,13 +750,20 @@ body {
 
   /* Header: una sola fila horizontal flotante y centrada */
   #app-header {
-    right: calc(var(--sidebar-w) + 48px);
+    right: calc(var(--sidebar-w) + 48px); /* Por defecto en tablet/laptop pequeña, esquiva el panel */
     height: auto;
     flex-direction: row;
     align-items: center;
     justify-content: center;
     padding-top: 16px;
     pointer-events: none;
+  }
+  
+  @media (min-width: 1300px) {
+    #app-header {
+      /* En pantallas grandes (PC), se centra matemáticamente perfecto en toda la pantalla */
+      right: 0; 
+    }
   }
 
   .header-brand {
