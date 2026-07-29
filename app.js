@@ -504,9 +504,10 @@ function renderObjetivos(combinados) {
 
 /** Actualiza los badge de conteo en los chips del header. */
 function updateBadges() {
-  document.getElementById('badge-buques').textContent = objectCounts.buques;
-  document.getElementById('badge-atones').textContent = objectCounts.atones;
-  document.getElementById('badge-bases').textContent  = objectCounts.bases;
+  // Los números fueron removidos del diseño para ocupar menos espacio en mobile.
+  // document.getElementById('badge-buques').textContent = objectCounts.buques;
+  // document.getElementById('badge-atones').textContent = objectCounts.atones;
+  // document.getElementById('badge-bases').textContent  = objectCounts.bases;
 }
 
 /**
