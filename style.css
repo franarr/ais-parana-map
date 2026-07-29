@@ -878,7 +878,18 @@ body {
     display: none !important;
   }
   
-  /* Achicar los chips de filtros en mobile para que entren en 1 línea */
+  /* Achicar los chips del header en mobile para que entren en 1 línea */
+  .chips-bar {
+    gap: 4px !important;
+    padding: 4px 6px 12px 6px !important;
+  }
+  .chip {
+    padding: 4px 8px !important;
+    font-size: 0.65rem !important;
+    gap: 3px !important;
+  }
+
+  /* Achicar los chips de filtros (panel stats) en mobile */
   .stats-chip {
     padding: 3px 8px !important;
     font-size: 0.65rem !important;
