@@ -538,7 +538,30 @@ body {
   padding: 4px 0;
   transition: color 0.2s;
 }
-.btn-metodologia-link:hover { color: var(--c-accent-light); }
+.btn-primary-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--c-accent-dim);
+  border: 1px solid var(--c-accent);
+  color: var(--c-accent-light);
+  border-radius: var(--radius-md);
+  font-family: 'Teko', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+.btn-primary-stats:hover {
+  background: var(--c-accent);
+  color: #12140f;
+  box-shadow: 0 4px 16px rgba(139, 175, 107, 0.4);
+}
 
 .btn-source {
   display: block;
