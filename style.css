@@ -877,6 +877,24 @@ body {
   .leaflet-control-zoom {
     display: none !important;
   }
+  
+  /* Achicar los chips de filtros en mobile para que entren en 1 línea */
+  .stats-chip {
+    padding: 3px 8px !important;
+    font-size: 0.65rem !important;
+  }
+  .stats-filter-group, .stats-chip-group {
+    gap: 4px !important;
+    margin-bottom: 8px !important;
+  }
+  .stats-subnav {
+    padding: 2px !important;
+    margin-bottom: 12px !important;
+  }
+  .stats-subtab {
+    padding: 6px 8px !important;
+    font-size: 0.7rem !important;
+  }
 }
 }
 
