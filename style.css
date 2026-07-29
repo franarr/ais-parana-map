@@ -846,6 +846,14 @@ body {
       border-radius: var(--radius-xl) var(--radius-xl) 0 0;
     }
   }
+/* Reglas exclusivas para Mobile (< 1024px) */
+@media (max-width: 1023px) {
+  .desktop-only {
+    display: none !important;
+  }
+  .leaflet-control-zoom {
+    display: none !important;
+  }
 }
 
 /* ──────────────────────────────────────────
