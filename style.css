@@ -750,7 +750,7 @@ body {
 
   /* Header: una sola fila horizontal flotante y centrada */
   #app-header {
-    right: 0;
+    right: calc(var(--sidebar-w) + 48px);
     height: auto;
     flex-direction: row;
     align-items: center;
