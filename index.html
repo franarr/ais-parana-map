@@ -99,6 +99,19 @@
     </svg>
   </button>
 
+  <!-- Estadísticas: abre el panel de estadísticas -->
+  <button class="fab" id="fab-stats"
+          title="Estadísticas de puertos"
+          aria-label="Ver estadísticas">
+    <svg width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <line x1="18" y1="20" x2="18" y2="10"/>
+      <line x1="12" y1="20" x2="12" y2="4"/>
+      <line x1="6" y1="20" x2="6" y2="14"/>
+    </svg>
+  </button>
+
   <!-- Info: abre el panel de metodologia -->
   <button class="fab" id="fab-info"
           title="Metodologia y fuentes"
@@ -111,21 +124,6 @@
       <line x1="12" y1="8" x2="12.01" y2="8" stroke-width="3"/>
     </svg>
   </button>
-
-  <!-- Reset: vuelve a la vista por defecto del mapa -->
-  <button class="fab" id="fab-reset"
-          title="Restablecer vista"
-          aria-label="Restablecer la vista inicial del mapa">
-    <svg width="20" height="20" viewBox="0 0 24 24"
-         fill="none" stroke="currentColor" stroke-width="2"
-         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-    </svg>
-  </button>
-
-
-
 </div>
 
 <!-- ══════════════════════════════════════════
@@ -164,6 +162,16 @@
 
     <!-- PANEL: CAPAS (default) -->
     <div class="sheet-panel" id="panel-layers">
+
+      <!-- Controles Desktop (Ocultos en Mobile porque usan FABs) -->
+      <div class="panel-section desktop-only" style="padding-top: 4px;">
+        <button class="btn-primary-stats" id="btn-show-stats-desktop">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin-right:8px;">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          Panel de Estadísticas
+        </button>
+      </div>
 
       <div class="panel-section">
         <div class="panel-section-title">Mapa base</div>
@@ -227,12 +235,13 @@
         </div>
       </div>
 
-      <div class="panel-section panel-footer">
-        <button class="btn-metodologia-link" id="btn-show-metodologia">
+      <!-- Links Metodología Desktop (Ocultos en Mobile porque usan FABs) -->
+      <div class="panel-section panel-footer desktop-only">
+        <button class="btn-metodologia-link" id="btn-show-metodologia-desktop">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8" stroke-width="3"/>
           </svg>
-          Metodologia y fuentes
+          Metodología y fuentes
         </button>
         <a href="https://hidrografia.agpse.gob.ar/" target="_blank" rel="noopener" class="btn-source">
           Ver fuente AGPSE &rarr;
@@ -278,8 +287,103 @@
       </div>
     </div><!-- /#panel-metodologia -->
 
+    <!-- PANEL: ESTADISTICAS -->
+    <div class="sheet-panel hidden" id="panel-stats">
+      <div class="panel-back">
+        <button class="btn-back" id="btn-back-stats">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"/>
+          </svg>
+          Volver
+        </button>
+      </div>
+
+      <div class="panel-section">
+        <div class="stats-header">
+          <h2 class="stats-title">Estadísticas & Análisis</h2>
+          <div class="stats-updated" id="est-updated">Cargando datos históricos...</div>
+        </div>
+
+        <!-- Filtros de Período -->
+        <div class="stats-filter-group" id="chipsPeriodo">
+          <button class="stats-chip" data-periodo="hoy">Hoy</button>
+          <button class="stats-chip" data-periodo="semana">Semana</button>
+          <button class="stats-chip" data-periodo="mes">Mes</button>
+          <button class="stats-chip active" data-periodo="todo">Todo</button>
+          <button class="stats-chip" data-periodo="custom">Personalizado</button>
+        </div>
+
+        <div class="stats-custom-range" id="rangoCustom" style="display:none">
+          <input type="date" id="fechaDesde">
+          <input type="date" id="fechaHasta">
+        </div>
+
+        <!-- Sub-pestañas: Puertos vs Buques -->
+        <div class="stats-subnav">
+          <button class="stats-subtab active" id="subtab-puertos" data-subtab="puertos">Actividad por Puerto</button>
+          <button class="stats-subtab" id="subtab-buques" data-subtab="buques">Rotación por Buque</button>
+        </div>
+
+        <!-- SUBVISTA PUERTOS -->
+        <div id="subvista-puertos">
+          <div class="stats-control-row">
+            <span class="stats-label">Métrica:</span>
+            <div class="stats-chip-group" id="chipsMetrica">
+              <button class="stats-chip active" data-metrica="buques">Buques únicos</button>
+              <button class="stats-chip" data-metrica="horas">Horas fondeados</button>
+              <button class="stats-chip" data-metrica="visitas">Visitas</button>
+            </div>
+          </div>
+
+          <div class="stats-kpi-grid" id="estResumenTop"></div>
+          <div class="stats-ranking-list" id="estRanking"></div>
+        </div>
+
+        <!-- SUBVISTA BUQUES -->
+        <div id="subvista-buques" style="display:none">
+          <div class="stats-control-row">
+            <span class="stats-label">Mostrar:</span>
+            <div class="stats-chip-group" id="chipsTopNBuques">
+              <button class="stats-chip" data-topb="10">Top 10</button>
+              <button class="stats-chip active" data-topb="20">Top 20</button>
+              <button class="stats-chip" data-topb="todos">Todos</button>
+            </div>
+          </div>
+          <div class="stats-kpi-grid" id="ebResumenTop"></div>
+          <div class="stats-note">Buques ordenados por diversidad de puertos visitados en el Paraná.</div>
+          <div class="stats-ranking-list" id="ebRanking"></div>
+        </div>
+
+        <div id="est-status" class="stats-status"></div>
+      </div>
+    </div><!-- /#panel-stats -->
+
   </div><!-- /.sheet-body -->
 </div><!-- /.bottom-sheet -->
+
+<!-- MODAL: DETALLE PUERTO -->
+<div id="modal-puerto" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" onclick="cerrarModalPuerto()">&times;</button>
+    <h3 class="modal-card-title" id="mp-titulo">Puerto</h3>
+    <div id="mp-minimapa" class="modal-map"></div>
+    <div class="modal-section-title">Buques registrados — Clic para ver recorrido</div>
+    <div id="mp-lista" class="modal-list"></div>
+    <div id="mp-track-status" class="modal-status"></div>
+  </div>
+</div>
+
+<!-- MODAL: DETALLE BUQUE -->
+<div id="modal-buque" class="modal-overlay" style="display:none">
+  <div class="modal-card">
+    <button class="modal-close" onclick="cerrarModalBuque()">&times;</button>
+    <h3 class="modal-card-title" id="mb-titulo">Buque</h3>
+    <div id="mb-minimapa" class="modal-map"></div>
+    <div class="modal-section-title">Itinerario de escalas — Clic para ver tramo</div>
+    <div id="mb-lista" class="modal-list"></div>
+    <div id="mb-track-status" class="modal-status"></div>
+  </div>
+</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="app.js"></script>

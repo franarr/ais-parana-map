@@ -293,9 +293,11 @@ function detailHTML(mmsi, tgt) {
       <h2 class="ficha-title">${escapeHtml(nombre)}</h2>
       <div class="ficha-subtitle">${escapeHtml(tipo)} &nbsp;&middot;&nbsp; ${pais}</div>
     </div>
-    
     <div class="ficha-photo">
-      <img src="${photoUrl}" alt="Foto de ${escapeHtml(nombre)}" onerror="this.src='https://via.placeholder.com/600x300/12140f/80a162?text=Sin+Foto+Disponible'">
+      <img src="${photoUrl}" alt="Foto de ${escapeHtml(nombre)}" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+      <div style="display:none; align-items:center; justify-content:center; height:100%; text-align:center; padding:20px; font-size:0.8rem; color:var(--c-dim); background: rgba(0,0,0,0.3); line-height:1.4;">
+        <span>Sin registro fotográfico.<br>No todos los buques cuentan con imágenes públicas en la base de datos.</span>
+      </div>
     </div>
 
     <div class="ficha-grid">
@@ -613,6 +615,10 @@ function setSheetState(state) {
   sheetState = state;
   sheet.style.transition = 'transform 0.35s cubic-bezier(0.4,0,0.2,1)';
   sheet.style.transform  = `translateY(${getStateY(state)}px)`;
+  
+  if (state === 'collapsed') {
+    document.querySelectorAll('.fab-group .fab').forEach(f => f.classList.remove('active'));
+  }
 }
 
 /** Inicializa la posición collapsed al cargar (en mobile). */
@@ -700,9 +706,9 @@ window.addEventListener('resize', () => {
     // Leer posición actual ANTES de cambiar nada
     const currentY = getCurrentY();
 
-    // Orden de estados: de más expandido a más colapsado
-    const stateOrder = ['expanded', 'mid', 'collapsed'];
-    const currentIdx = stateOrder.indexOf(sheetState);
+    // Orden de estados: de más expandido a más colapsado (saltamos el 'mid')
+    const stateOrder = ['expanded', 'collapsed'];
+    const currentIdx = stateOrder.indexOf(sheetState === 'mid' ? 'collapsed' : sheetState);
 
     let targetState;
 
@@ -798,12 +804,28 @@ document.getElementById('btn-back-detail').addEventListener('click', () => {
 document.getElementById('btn-back-metodologia').addEventListener('click', () => {
   showPanel('layers');
 });
-
-// Botón "Metodología" dentro del panel de capas
-document.getElementById('btn-show-metodologia').addEventListener('click', () => {
-  showPanel('metodologia');
-  if (!isDesktop()) setSheetState('expanded');
+document.getElementById('btn-back-stats').addEventListener('click', () => {
+  showPanel('layers');
 });
+
+// Botón "Metodología" dentro del panel de capas (solo Desktop)
+const btnMetodologiaDesktop = document.getElementById('btn-show-metodologia-desktop');
+if (btnMetodologiaDesktop) {
+  btnMetodologiaDesktop.addEventListener('click', () => {
+    showPanel('metodologia');
+    if (!isDesktop()) setSheetState('expanded');
+  });
+}
+
+// Botón "Estadísticas" dentro del panel de capas (solo Desktop)
+const btnStatsDesktop = document.getElementById('btn-show-stats-desktop');
+if (btnStatsDesktop) {
+  btnStatsDesktop.addEventListener('click', () => {
+    showPanel('stats');
+    if (!isDesktop()) setSheetState('expanded');
+    statsCargar();
+  });
+}
 
 
 /* ══════════════════════════════════════════
@@ -839,25 +861,50 @@ map.on('click', () => {
    ══════════════════════════════════════════ */
 
 // FAB Capas: toggle del sheet entre collapsed y mid
+function clearFabActive() {
+  document.querySelectorAll('.fab-group .fab').forEach(f => f.classList.remove('active'));
+}
+
 document.getElementById('fab-layers').addEventListener('click', () => {
-  showPanel('layers');
-  const next = sheetState === 'collapsed' ? 'mid' : 'collapsed';
+  const isCurrentlyOpen = sheetState !== 'collapsed' && !document.getElementById('panel-layers').classList.contains('hidden');
+  const next = isCurrentlyOpen ? 'collapsed' : 'expanded';
+  if (next !== 'collapsed') {
+    showPanel('layers');
+    clearFabActive();
+    document.getElementById('fab-layers').classList.add('active');
+  }
   setSheetState(next);
-  document.getElementById('fab-layers').classList.toggle('active', next !== 'collapsed');
 });
 
 // FAB Info: abre panel de metodología
 document.getElementById('fab-info').addEventListener('click', () => {
-  showPanel('metodologia');
-  setSheetState('expanded');
-  document.getElementById('fab-info').classList.add('active');
+  const isCurrentlyOpen = sheetState !== 'collapsed' && !document.getElementById('panel-metodologia').classList.contains('hidden');
+  const next = isCurrentlyOpen ? 'collapsed' : 'expanded';
+  if (next !== 'collapsed') {
+    showPanel('metodologia');
+    clearFabActive();
+    document.getElementById('fab-info').classList.add('active');
+  }
+  setSheetState(next);
 });
 
-// FAB Reset: restablece la vista del mapa (preservado del original)
-document.getElementById('fab-reset').addEventListener('click', () => {
-  map.setView(DEFAULT_CENTER, DEFAULT_ZOOM, { animate: true });
-});
+// FAB Stats: abre panel de estadísticas
+const fabStats = document.getElementById('fab-stats');
+if (fabStats) {
+  fabStats.addEventListener('click', () => {
+    const isCurrentlyOpen = sheetState !== 'collapsed' && !document.getElementById('panel-stats').classList.contains('hidden');
+    const next = isCurrentlyOpen ? 'collapsed' : 'expanded';
+    if (next !== 'collapsed') {
+      showPanel('stats');
+      clearFabActive();
+      fabStats.classList.add('active');
+      statsCargar();
+    }
+    if (!isDesktop()) setSheetState(next);
+  });
+}
 
+// El FAB Reset fue removido del layout.
 
 
 /* ══════════════════════════════════════════
@@ -953,3 +1000,515 @@ async function cargarDatos() {
 cargarCapasReferencia();
 cargarDatos();
 setInterval(cargarDatos, 300_000);
+
+
+/* ══════════════════════════════════════════
+   21. MÓDULO DE ESTADÍSTICAS E HISTORIAL
+   Fuente: historico-ais (visitas.json / resumen_diario.json)
+   ══════════════════════════════════════════ */
+const HIST_BASE = 'https://raw.githubusercontent.com/thomasartopoulos/historico-ais/main/data';
+const UMBRAL_ESTADIA_LARGA_HORAS = 48;
+
+let statsVisitas = [];
+let statsCargado = false;
+let statsEstado  = { periodo: 'todo', metrica: 'buques', topN: 10 };
+let statsTopNBuques = 20;
+
+function formatoFechaHora(fecha) {
+  if (!fecha) return '-';
+  return new Date(fecha).toLocaleString('es-AR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+}
+
+function statsRangoDeFechas(periodo) {
+  const ahora = new Date();
+  const inicioHoy = new Date(ahora.getFullYear(), ahora.getMonth(), ahora.getDate());
+  if (periodo === 'hoy') return [inicioHoy, ahora];
+  if (periodo === 'semana') return [new Date(inicioHoy.getTime() - 7 * 86400000), ahora];
+  if (periodo === 'mes') return [new Date(inicioHoy.getTime() - 30 * 86400000), ahora];
+  if (periodo === 'custom') {
+    const desde = document.getElementById('fechaDesde')?.value;
+    const hasta = document.getElementById('fechaHasta')?.value;
+    return [desde ? new Date(desde) : new Date(0), hasta ? new Date(hasta + 'T23:59:59') : ahora];
+  }
+  return [new Date(0), ahora];
+}
+
+function statsCalcularRanking() {
+  const [desde, hasta] = statsRangoDeFechas(statsEstado.periodo);
+  const enRango = statsVisitas.filter(v => {
+    const t = new Date(v.inicio);
+    return t >= desde && t <= hasta;
+  });
+
+  const porPuerto = {};
+  enRango.forEach(v => {
+    const p = porPuerto[v.puerto] || (porPuerto[v.puerto] = { buques: new Set(), horas: 0, visitas: 0, estadiaLarga: false });
+    p.buques.add(v.mmsi);
+    p.horas += v.duracion_horas;
+    p.visitas += 1;
+    if (v.duracion_horas >= UMBRAL_ESTADIA_LARGA_HORAS) p.estadiaLarga = true;
+  });
+
+  const campo = statsEstado.metrica === 'buques' ? 'buques' : statsEstado.metrica === 'horas' ? 'horas' : 'visitas';
+  let filas = Object.entries(porPuerto).map(([puerto, d]) => ({
+    puerto, buques: d.buques.size, horas: Math.round(d.horas * 10) / 10, visitas: d.visitas, estadiaLarga: d.estadiaLarga,
+  }));
+  filas.sort((a, b) => b[campo] - a[campo]);
+
+  return { filas, totalBuques: new Set(enRango.map(v => v.mmsi)).size, totalVisitas: enRango.length };
+}
+
+function statsRender() {
+  const { filas, totalBuques, totalVisitas } = statsCalcularRanking();
+  const campo = statsEstado.metrica === 'buques' ? 'buques' : statsEstado.metrica === 'horas' ? 'horas' : 'visitas';
+  const n = statsEstado.topN === 'todos' ? filas.length : statsEstado.topN;
+  const top = filas.slice(0, n);
+  const max = top.length ? Math.max(...top.map(f => f[campo])) : 1;
+
+  const kpiEl = document.getElementById('estResumenTop');
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div class="stats-kpi-card"><div class="num">${filas.length}</div><div class="lbl">Puertos activos</div></div>
+      <div class="stats-kpi-card"><div class="num">${totalBuques}</div><div class="lbl">Buques únicos</div></div>
+      <div class="stats-kpi-card"><div class="num">${totalVisitas}</div><div class="lbl">Visitas totales</div></div>
+    `;
+  }
+
+  const cont = document.getElementById('estRanking');
+  if (!cont) return;
+  if (top.length === 0) {
+    cont.innerHTML = "<p class='stats-status'>Sin datos de actividad en el período seleccionado.</p>";
+    return;
+  }
+  cont.innerHTML = top.map((f, i) => {
+    const valor = f[campo];
+    const sub = statsEstado.metrica === 'buques' ? 'buques' : statsEstado.metrica === 'horas' ? 'hs' : 'visitas';
+    const pct = Math.round((valor / max) * 100);
+    const badge = f.estadiaLarga ? `<span class="badge-estadia-larga">+48hs</span>` : '';
+    return `
+      <div class="est-puerto-row ${f.estadiaLarga ? 'estadia-larga' : ''}" data-puerto="${escapeHtml(f.puerto)}" style="cursor:pointer;">
+        <div class="est-puerto-rank ${i < 3 ? 'top3' : ''}">${i + 1}</div>
+        <div class="est-puerto-info">
+          <div class="est-puerto-nombre">${escapeHtml(f.puerto)}${badge}</div>
+          <div class="est-barra-track"><div class="est-barra-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="est-puerto-metrica"><div class="valor">${valor}</div><div class="sub">${sub}</div></div>
+      </div>`;
+  }).join('');
+
+  cont.querySelectorAll('.est-puerto-row').forEach(row => {
+    row.addEventListener('click', () => abrirModalPuerto(row.dataset.puerto));
+  });
+}
+
+function statsSetupChips(groupId, dataAttr, onSelect) {
+  const group = document.getElementById(groupId);
+  if (!group) return;
+  group.querySelectorAll('.stats-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      group.querySelectorAll('.stats-chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      onSelect(chip.dataset[dataAttr]);
+      statsRender();
+    });
+  });
+}
+
+statsSetupChips('chipsPeriodo', 'periodo', v => {
+  statsEstado.periodo = v;
+  const rc = document.getElementById('rangoCustom');
+  if (rc) rc.style.display = (v === 'custom') ? 'flex' : 'none';
+});
+statsSetupChips('chipsMetrica', 'metrica', v => statsEstado.metrica = v);
+
+document.getElementById('fechaDesde')?.addEventListener('change', statsRender);
+document.getElementById('fechaHasta')?.addEventListener('change', statsRender);
+
+async function statsCargar() {
+  if (statsCargado) { statsRender(); return; }
+  const statusEl = document.getElementById('est-status');
+  try {
+    const resp = await fetch(`${HIST_BASE}/visitas.json`, { cache: 'no-store' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const data = await resp.json();
+    statsVisitas = data.visitas || [];
+    const updatedEl = document.getElementById('est-updated');
+    if (updatedEl) {
+      updatedEl.textContent = 'Actualizado: ' + formatoFechaHora(data.actualizado) +
+        ` · ${statsVisitas.length} registros históricos`;
+    }
+    if (statsVisitas.length === 0) {
+      if (statusEl) statusEl.textContent = 'Aún no hay suficientes registros históricos.';
+      return;
+    }
+    statsCargado = true;
+    statsRender();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Sin datos históricos remotos (esperando primera captura de historico-ais).';
+    console.warn('Estadísticas:', err);
+  }
+}
+
+// Sub-tabs (Puertos / Buques)
+document.querySelectorAll('[data-subtab]').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('[data-subtab]').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    const esBuques = chip.dataset.subtab === 'buques';
+    const subP = document.getElementById('subvista-puertos');
+    const subB = document.getElementById('subvista-buques');
+    if (subP) subP.style.display = esBuques ? 'none' : 'block';
+    if (subB) subB.style.display = esBuques ? 'block' : 'none';
+    if (esBuques) statsRenderBuques();
+  });
+});
+
+document.querySelectorAll('#chipsTopNBuques .stats-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('#chipsTopNBuques .stats-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    statsTopNBuques = chip.dataset.topb === 'todos' ? 'todos' : parseInt(chip.dataset.topb, 10);
+    statsRenderBuques();
+  });
+});
+
+function statsCalcularBuques() {
+  const [desde, hasta] = statsRangoDeFechas(statsEstado.periodo);
+  const enRango = statsVisitas.filter(v => {
+    const t = new Date(v.inicio);
+    return t >= desde && t <= hasta;
+  });
+
+  const porBuque = {};
+  enRango.forEach(v => {
+    const b = porBuque[v.mmsi] || (porBuque[v.mmsi] = {
+      mmsi: v.mmsi, nombre: v.nombre, puertos: new Set(), visitas: [], horas: 0,
+    });
+    b.puertos.add(v.puerto);
+    b.visitas.push(v);
+    b.horas += v.duracion_horas;
+    if (v.nombre && !b.nombre) b.nombre = v.nombre;
+  });
+
+  let filas = Object.values(porBuque).map(b => ({
+    mmsi: b.mmsi, nombre: b.nombre, puertosDistintos: b.puertos.size,
+    visitasCount: b.visitas.length, horas: Math.round(b.horas * 10) / 10,
+    visitas: b.visitas.sort((a, c) => new Date(a.inicio) - new Date(c.inicio)),
+    estadiaLarga: b.visitas.some(v => v.duracion_horas >= UMBRAL_ESTADIA_LARGA_HORAS),
+  }));
+  filas.sort((a, b) => b.puertosDistintos - a.puertosDistintos || b.visitasCount - a.visitasCount);
+
+  return { filas, multiPuerto: filas.filter(f => f.puertosDistintos > 1).length };
+}
+
+function statsRenderBuques() {
+  const { filas, multiPuerto } = statsCalcularBuques();
+  const n = statsTopNBuques === 'todos' ? filas.length : statsTopNBuques;
+  const top = filas.slice(0, n);
+  const max = top.length ? Math.max(...top.map(f => f.puertosDistintos)) : 1;
+
+  const kpiEl = document.getElementById('ebResumenTop');
+  if (kpiEl) {
+    kpiEl.innerHTML = `
+      <div class="stats-kpi-card"><div class="num">${filas.length}</div><div class="lbl">Buques registrados</div></div>
+      <div class="stats-kpi-card"><div class="num">${multiPuerto}</div><div class="lbl">Visitaron 2+ puertos</div></div>
+    `;
+  }
+
+  const cont = document.getElementById('ebRanking');
+  if (!cont) return;
+  if (top.length === 0) {
+    cont.innerHTML = "<p class='stats-status'>Sin datos de buques en el período seleccionado.</p>";
+    return;
+  }
+  cont.innerHTML = top.map((f, i) => {
+    const pct = Math.round((f.puertosDistintos / max) * 100);
+    const badge = f.estadiaLarga ? `<span class="badge-estadia-larga">+48hs</span>` : '';
+    return `
+      <div class="est-puerto-row ${f.estadiaLarga ? 'estadia-larga' : ''}" data-mmsi="${escapeHtml(f.mmsi)}" style="cursor:pointer;">
+        <div class="est-puerto-rank ${i < 3 && f.puertosDistintos > 1 ? 'top3' : ''}">${i + 1}</div>
+        <div class="est-puerto-info">
+          <div class="est-puerto-nombre">${escapeHtml(f.nombre || ('MMSI ' + f.mmsi))}${badge}</div>
+          <div class="est-barra-track"><div class="est-barra-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="est-puerto-metrica"><div class="valor">${f.puertosDistintos}</div><div class="sub">puertos</div></div>
+      </div>`;
+  }).join('');
+
+  cont.querySelectorAll('.est-puerto-row').forEach(row => {
+    row.addEventListener('click', () => abrirModalBuque(row.dataset.mmsi, filas.find(f => f.mmsi === row.dataset.mmsi)));
+  });
+}
+
+/* Modales de Puerto y Buque */
+let mpMapa = null;
+let mpCapaTrack = null;
+let mpMarcadorPuerto = null;
+let mpPuertosCoords = null;
+const mpCacheHistorico = {};
+
+async function mpCargarCoordsPuertos() {
+  if (mpPuertosCoords) return mpPuertosCoords;
+  try {
+    const resp = await fetch('data/puertos.geojson', { cache: 'force-cache' });
+    const gj = await resp.json();
+    mpPuertosCoords = {};
+    gj.features.forEach(f => {
+      const [lon, lat] = f.geometry.coordinates;
+      mpPuertosCoords[f.properties.nombre] = [lat, lon];
+    });
+  } catch (e) {
+    mpPuertosCoords = {};
+  }
+  return mpPuertosCoords;
+}
+
+function mpInicializarMapa(centro, divId, marcarPuerto) {
+  if (mpMapa) { mpMapa.remove(); }
+  mpMapa = L.map(divId, { zoomControl: false, attributionControl: false }).setView(centro, 13);
+  L.tileLayer('https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/argenmap_oscuro@EPSG%3A3857@png/{z}/{x}/{-y}.png', { minZoom: 1, maxZoom: 18 }).addTo(mpMapa);
+  mpMarcadorPuerto = marcarPuerto ? L.circleMarker(centro, {
+    radius: 7, color: '#06222b', weight: 2, fillColor: '#eab308', fillOpacity: 1,
+  }).addTo(mpMapa) : null;
+  mpCapaTrack = L.layerGroup().addTo(mpMapa);
+}
+
+function mpDiasEntre(fechaIni, fechaFin) {
+  const dias = [];
+  let d = new Date(fechaIni + 'T00:00:00Z');
+  const hasta = new Date(fechaFin + 'T00:00:00Z');
+  while (d <= hasta) {
+    dias.push(d.toISOString().slice(0, 10));
+    d = new Date(d.getTime() + 86400000);
+  }
+  return dias;
+}
+
+async function mpCargarDiaHistorico(fecha) {
+  if (mpCacheHistorico[fecha]) return mpCacheHistorico[fecha];
+  const [anio, mes] = fecha.split('-');
+  const url = `${HIST_BASE}/historico/${anio}/${mes}/${fecha}.json`;
+  try {
+    const resp = await fetch(url, { cache: 'force-cache' });
+    if (!resp.ok) { mpCacheHistorico[fecha] = []; return []; }
+    const data = await resp.json();
+    mpCacheHistorico[fecha] = data;
+    return data;
+  } catch (e) {
+    mpCacheHistorico[fecha] = [];
+    return [];
+  }
+}
+
+async function mpMostrarTrack(visita, filaEl, opts) {
+  opts = opts || {};
+  const filaSelector = opts.filaSelector || '.mp-buque-row';
+  const statusId = opts.statusId || 'mp-track-status';
+  document.querySelectorAll(filaSelector).forEach(r => r.classList.remove('activo'));
+  if (filaEl) filaEl.classList.add('activo');
+
+  const statusEl = document.getElementById(statusId);
+  if (statusEl) statusEl.textContent = 'Cargando track de recorrido...';
+  mpCapaTrack.clearLayers();
+
+  try {
+    const fechaIni = visita.inicio.slice(0, 10);
+    const fechaFin = visita.fin.slice(0, 10);
+    const dias = mpDiasEntre(fechaIni, fechaFin);
+    const t0 = new Date(visita.inicio).getTime();
+    const t1 = new Date(visita.fin).getTime();
+
+    const puntos = [];
+    for (const dia of dias) {
+      const corridas = await mpCargarDiaHistorico(dia);
+      corridas.forEach(corrida => {
+        const ts = new Date(corrida.timestamp).getTime();
+        if (ts < t0 - 5 * 60000 || ts > t1 + 5 * 60000) return;
+
+        let mejorTgt = null;
+        Object.values(corrida.zonas || {}).forEach(dz => {
+          const tgt = (dz.tgts || {})[visita.mmsi];
+          if (tgt && typeof tgt.x === 'number' && typeof tgt.y === 'number') {
+            const edad = tgt.a ?? Infinity;
+            const edadMejor = mejorTgt ? (mejorTgt.a ?? Infinity) : Infinity;
+            if (!mejorTgt || edad < edadMejor) mejorTgt = tgt;
+          }
+        });
+        if (mejorTgt) {
+          puntos.push({ ts, lat: mejorTgt.y / ESCALA, lon: mejorTgt.x / ESCALA });
+        }
+      });
+    }
+    puntos.sort((a, b) => a.ts - b.ts);
+
+    if (puntos.length === 0) {
+      if (statusEl) statusEl.textContent = 'No hay posiciones históricas registradas para ese lapso.';
+      return;
+    }
+
+    const latlngs = puntos.map(p => [p.lat, p.lon]);
+    L.polyline(latlngs, { color: '#2fb6c9', weight: 3, opacity: 0.85 }).addTo(mpCapaTrack);
+    L.circleMarker(latlngs[0], { radius: 5, color: '#06222b', weight: 2, fillColor: '#22c55e', fillOpacity: 1 })
+      .bindPopup('Inicio').addTo(mpCapaTrack);
+    L.circleMarker(latlngs[latlngs.length - 1], { radius: 5, color: '#06222b', weight: 2, fillColor: '#ef4444', fillOpacity: 1 })
+      .bindPopup('Fin').addTo(mpCapaTrack);
+
+    const puntosBounds = mpMarcadorPuerto ? latlngs.concat([mpMarcadorPuerto.getLatLng()]) : latlngs;
+    mpMapa.fitBounds(L.latLngBounds(puntosBounds), { padding: [20, 20] });
+
+    if (statusEl) statusEl.textContent = `${puntos.length} puntos registrados (${formatoFechaHora(visita.inicio)} → ${formatoFechaHora(visita.fin)})`;
+  } catch (err) {
+    if (statusEl) statusEl.textContent = 'Error cargando track: ' + err.message;
+  }
+}
+
+function agruparVisitasPorDia(visitas, claveExtraFn) {
+  const grupos = {};
+  visitas.forEach(v => {
+    const dia = v.inicio.slice(0, 10);
+    const extra = claveExtraFn(v);
+    const clave = `${extra}|${dia}`;
+    if (!grupos[clave]) {
+      grupos[clave] = { extra, fecha: dia, horas: 0, paradas: [], inicio: v.inicio, fin: v.fin, nombre: v.nombre, mmsi: v.mmsi, puerto: v.puerto };
+    }
+    const g = grupos[clave];
+    g.paradas.push(v);
+    g.horas += v.duracion_horas;
+    if (new Date(v.inicio) < new Date(g.inicio)) g.inicio = v.inicio;
+    if (new Date(v.fin) > new Date(g.fin)) g.fin = v.fin;
+    if (v.nombre && !g.nombre) g.nombre = v.nombre;
+  });
+  return Object.values(grupos)
+    .map(g => ({ ...g, horas: Math.round(g.horas * 100) / 100 }))
+    .sort((a, b) => new Date(b.inicio) - new Date(a.inicio));
+}
+
+async function abrirModalPuerto(puerto) {
+  const coords = await mpCargarCoordsPuertos();
+  const centro = coords[puerto] || [-32.75, -60.7];
+
+  const titEl = document.getElementById('mp-titulo');
+  if (titEl) titEl.textContent = puerto;
+  const modP = document.getElementById('modal-puerto');
+  if (modP) modP.style.display = 'flex';
+
+  setTimeout(() => {
+    mpInicializarMapa(centro, 'mp-minimapa', true);
+    mpMapa.invalidateSize();
+  }, 50);
+
+  const [desde, hasta] = statsRangoDeFechas(statsEstado.periodo);
+  const visitasPuerto = statsVisitas
+    .filter(v => v.puerto === puerto)
+    .filter(v => { const t = new Date(v.inicio); return t >= desde && t <= hasta; });
+
+  const grupos = agruparVisitasPorDia(visitasPuerto, v => v.mmsi);
+
+  const lista = document.getElementById('mp-lista');
+  if (!lista) return;
+  if (grupos.length === 0) {
+    lista.innerHTML = "<p class='stats-status'>Sin buques registrados en este período.</p>";
+    return;
+  }
+  lista.innerHTML = grupos.map((g, i) => {
+    const badgeParadas = g.paradas.length > 1 ? `<span class="mp-badge-paradas">${g.paradas.length} paradas</span>` : '';
+    const badgeLarga = g.horas >= UMBRAL_ESTADIA_LARGA_HORAS ? `<span class="badge-estadia-larga">+48hs</span>` : '';
+    return `
+    <div class="mp-buque-row ${g.horas >= UMBRAL_ESTADIA_LARGA_HORAS ? 'estadia-larga' : ''}" data-idx="${i}">
+      <div>
+        <div class="mp-buque-nombre">${escapeHtml(g.nombre || ('MMSI ' + g.mmsi))}${badgeParadas}${badgeLarga}</div>
+        <div class="mp-buque-sub">${formatoFechaHora(g.inicio)} → ${formatoFechaHora(g.fin)}</div>
+      </div>
+      <div class="mp-buque-dur">${g.horas}h</div>
+    </div>`;
+  }).join('');
+
+  lista.querySelectorAll('.mp-buque-row').forEach(row => {
+    const g = grupos[+row.dataset.idx];
+    row.addEventListener('click', () => mpMostrarTrack(
+      { mmsi: g.mmsi, inicio: g.inicio, fin: g.fin }, row,
+      { filaSelector: '#mp-lista .mp-buque-row', statusId: 'mp-track-status' }));
+  });
+
+  if (grupos.length > 0) {
+    const g0 = grupos[0];
+    mpMostrarTrack({ mmsi: g0.mmsi, inicio: g0.inicio, fin: g0.fin }, lista.querySelector('.mp-buque-row'),
+      { filaSelector: '#mp-lista .mp-buque-row', statusId: 'mp-track-status' });
+  }
+}
+
+function cerrarModalPuerto() {
+  const modP = document.getElementById('modal-puerto');
+  if (modP) modP.style.display = 'none';
+}
+window.cerrarModalPuerto = cerrarModalPuerto;
+
+async function abrirModalBuque(mmsi, datosBuque) {
+  if (!datosBuque) return;
+  const coords = await mpCargarCoordsPuertos();
+
+  const titEl = document.getElementById('mb-titulo');
+  if (titEl) titEl.textContent = datosBuque.nombre || `MMSI ${mmsi}`;
+  const modB = document.getElementById('modal-buque');
+  if (modB) modB.style.display = 'flex';
+
+  const visitas = datosBuque.visitas;
+  const gruposAsc = agruparVisitasPorDia(visitas, v => v.puerto).slice().reverse();
+  const centro = coords[gruposAsc[0]?.puerto] || [-32.75, -60.7];
+
+  setTimeout(() => {
+    mpInicializarMapa(centro, 'mb-minimapa', false);
+    mpMapa.invalidateSize();
+    const puertosUnicos = [...new Set(gruposAsc.map(g => g.puerto))];
+    const marcadores = [];
+    puertosUnicos.forEach((p, idx) => {
+      const c = coords[p];
+      if (!c) return;
+      const m = L.marker(c, {
+        icon: L.divIcon({
+          className: '',
+          html: `<div style="background:#eab308;color:#0f172a;border-radius:50%;width:22px;height:22px;
+            display:flex;align-items:center;justify-content:center;font-family:Teko,sans-serif;
+            font-size:0.9rem;font-weight:700;border:2px solid #06222b;">${idx + 1}</div>`,
+          iconSize: [22, 22], iconAnchor: [11, 11],
+        }),
+      }).bindPopup(`<div class="popup-title">${idx + 1}. ${escapeHtml(p)}</div>`).addTo(mpMapa);
+      marcadores.push(m);
+    });
+    if (marcadores.length) {
+      mpMapa.fitBounds(L.latLngBounds(marcadores.map(m => m.getLatLng())), { padding: [30, 30] });
+    }
+  }, 50);
+
+  const lista = document.getElementById('mb-lista');
+  if (!lista) return;
+  lista.innerHTML = gruposAsc.map((g, i) => {
+    const badgeParadas = g.paradas.length > 1 ? `<span class="mp-badge-paradas">${g.paradas.length} paradas</span>` : '';
+    const badgeLarga = g.horas >= UMBRAL_ESTADIA_LARGA_HORAS ? `<span class="badge-estadia-larga">+48hs</span>` : '';
+    return `
+    <div class="mp-buque-row ${g.horas >= UMBRAL_ESTADIA_LARGA_HORAS ? 'estadia-larga' : ''}" data-idx="${i}">
+      <div>
+        <div class="mp-buque-nombre">${i + 1}. ${escapeHtml(g.puerto)}${badgeParadas}${badgeLarga}</div>
+        <div class="mp-buque-sub">${formatoFechaHora(g.inicio)} → ${formatoFechaHora(g.fin)}</div>
+      </div>
+      <div class="mp-buque-dur">${g.horas}h</div>
+    </div>`;
+  }).join('');
+
+  lista.querySelectorAll('.mp-buque-row').forEach(row => {
+    const g = gruposAsc[+row.dataset.idx];
+    row.addEventListener('click', () => mpMostrarTrack(
+      { mmsi: g.mmsi, inicio: g.inicio, fin: g.fin }, row,
+      { filaSelector: '#mb-lista .mp-buque-row', statusId: 'mb-track-status' }));
+  });
+}
+
+function cerrarModalBuque() {
+  const modB = document.getElementById('modal-buque');
+  if (modB) modB.style.display = 'none';
+}
+window.cerrarModalBuque = cerrarModalBuque;
+
