@@ -776,9 +776,9 @@ body {
     top: 24px;
     left: auto;
     right: 24px;
-    bottom: 24px;
+    bottom: auto;
     width: var(--sidebar-w);
-    height: calc(100vh - 48px);
+    max-height: calc(100vh - 48px);
     border-radius: 20px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 12px 40px rgba(0,0,0,0.5);
@@ -844,10 +844,10 @@ body {
     overflow-y: auto;
   }
 
-  /* En desktop, overlay-grid: 1 columna (sidebar más angosto) */
+  /* En desktop, overlay-grid: 2 columnas igual que en mobile */
   .overlay-grid {
-    grid-template-columns: 1fr;
-    gap: 2px 0;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 8px;
   }
 }
 
