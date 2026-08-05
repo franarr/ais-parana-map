@@ -46,6 +46,90 @@ const USO_COLOR_DEFAULT = '#94a3b8';
 const DEFAULT_CENTER = [-32.75, -60.7];
 const DEFAULT_ZOOM   = 10;
 
+const MID_MAP = {
+  '351': 'Panamá', '352': 'Panamá', '353': 'Panamá', '354': 'Panamá', '355': 'Panamá', '356': 'Panamá', '357': 'Panamá', '370': 'Panamá', '371': 'Panamá', '372': 'Panamá', '373': 'Panamá',
+  '636': 'Liberia',
+  '538': 'Islas Marshall',
+  '477': 'Hong Kong',
+  '563': 'Singapur', '564': 'Singapur', '565': 'Singapur', '566': 'Singapur',
+  '215': 'Malta', '229': 'Malta', '248': 'Malta', '249': 'Malta', '256': 'Malta',
+  '308': 'Bahamas', '309': 'Bahamas', '311': 'Bahamas',
+  '237': 'Grecia', '239': 'Grecia', '240': 'Grecia', '241': 'Grecia',
+  '412': 'China', '413': 'China', '414': 'China',
+  '209': 'Chipre', '210': 'Chipre', '212': 'Chipre',
+  '701': 'Argentina', '755': 'Paraguay', '770': 'Uruguay', '710': 'Brasil', '725': 'Chile', '735': 'Ecuador', '760': 'Perú',
+  '235': 'Reino Unido', '211': 'Alemania', '218': 'Alemania', '219': 'Dinamarca', '220': 'Dinamarca',
+  '244': 'Países Bajos', '257': 'Noruega', '258': 'Noruega', '259': 'Noruega', '247': 'Italia', '224': 'España',
+  '366': 'EE.UU.', '367': 'EE.UU.', '368': 'EE.UU.', '369': 'EE.UU.',
+  '431': 'Japón', '440': 'Corea del Sur', '441': 'Corea del Sur', '548': 'Filipinas'
+};
+
+function statsRenderNacionalidades() {
+  const [desde, hasta] = statsRangoDeFechas(statsEstado.periodo);
+  const enRango = statsVisitas.filter(v => {
+    const t = new Date(v.inicio);
+    return t >= desde && t <= hasta;
+  });
+
+  const porBandera = {};
+  const buquesContados = new Set();
+  
+  enRango.forEach(v => {
+    if (!v.mmsi) return;
+    const mmsiStr = String(v.mmsi);
+    if (mmsiStr.length < 3) return;
+    
+    // Contamos cada buque una sola vez para la métrica principal
+    if (buquesContados.has(mmsiStr)) return;
+    buquesContados.add(mmsiStr);
+    
+    const mid = mmsiStr.substring(0, 3);
+    const bandera = MID_MAP[mid] || `Otra (MID ${mid})`;
+    
+    if (!porBandera[bandera]) {
+      porBandera[bandera] = { bandera, buques: 0 };
+    }
+    porBandera[bandera].buques += 1;
+  });
+
+  const filas = Object.values(porBandera).sort((a, b) => b.buques - a.buques);
+
+  const topCont = document.getElementById('estResumenTopNac');
+  if (topCont) {
+    topCont.innerHTML = `
+      <div class="kpi-card">
+        <div class="kpi-val">${buquesContados.size}</div>
+        <div class="kpi-label">Buques Totales</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-val">${filas.length}</div>
+        <div class="kpi-label">Banderas Distintas</div>
+      </div>
+    `;
+  }
+
+  const listCont = document.getElementById('estRankingNacionalidades');
+  if (!listCont) return;
+  if (filas.length === 0) {
+    listCont.innerHTML = '<div class="stats-empty">Sin datos en el rango seleccionado</div>';
+    return;
+  }
+
+  const max = filas.length > 0 ? filas[0].buques : 1;
+  listCont.innerHTML = filas.map((f, i) => {
+    const pct = Math.round((f.buques / max) * 100);
+    return `
+      <div class="est-puerto-row">
+        <div class="est-puerto-rank ${i < 3 ? 'top3' : ''}">${i + 1}</div>
+        <div class="est-puerto-info">
+          <div class="est-puerto-nombre">${escapeHtml(f.bandera)}</div>
+          <div class="est-barra-track"><div class="est-barra-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div class="est-puerto-metrica"><div class="valor">${f.buques}</div><div class="sub">buques</div></div>
+      </div>`;
+  }).join('');
+}
+
 
 /* ══════════════════════════════════════════
    2. INICIALIZACIÓN DEL MAPA
@@ -1108,6 +1192,17 @@ function statsRender() {
   cont.querySelectorAll('.est-puerto-row').forEach(row => {
     row.addEventListener('click', () => abrirModalPuerto(row.dataset.puerto));
   });
+function statsRefreshActual() {
+  const tabBuques = document.querySelector('[data-subtab="buques"]');
+  const tabNac = document.querySelector('[data-subtab="nacionalidades"]');
+  
+  if (tabBuques && tabBuques.classList.contains('active')) {
+    statsRenderBuques();
+  } else if (tabNac && tabNac.classList.contains('active')) {
+    statsRenderNacionalidades();
+  } else {
+    statsRender();
+  }
 }
 
 function statsSetupChips(groupId, dataAttr, onSelect) {
@@ -1118,7 +1213,7 @@ function statsSetupChips(groupId, dataAttr, onSelect) {
       group.querySelectorAll('.stats-chip').forEach(c => c.classList.remove('active'));
       chip.classList.add('active');
       onSelect(chip.dataset[dataAttr]);
-      statsRender();
+      statsRefreshActual();
     });
   });
 }
@@ -1130,8 +1225,8 @@ statsSetupChips('chipsPeriodo', 'periodo', v => {
 });
 statsSetupChips('chipsMetrica', 'metrica', v => statsEstado.metrica = v);
 
-document.getElementById('fechaDesde')?.addEventListener('change', statsRender);
-document.getElementById('fechaHasta')?.addEventListener('change', statsRender);
+document.getElementById('fechaDesde')?.addEventListener('change', statsRefreshActual);
+document.getElementById('fechaHasta')?.addEventListener('change', statsRefreshActual);
 
 async function statsCargar() {
   if (statsCargado) { statsRender(); return; }
@@ -1158,17 +1253,22 @@ async function statsCargar() {
   }
 }
 
-// Sub-tabs (Puertos / Buques)
+// Sub-tabs (Puertos / Buques / Nacionalidades)
 document.querySelectorAll('[data-subtab]').forEach(chip => {
   chip.addEventListener('click', () => {
     document.querySelectorAll('[data-subtab]').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
-    const esBuques = chip.dataset.subtab === 'buques';
+    const tab = chip.dataset.subtab;
+    
     const subP = document.getElementById('subvista-puertos');
     const subB = document.getElementById('subvista-buques');
-    if (subP) subP.style.display = esBuques ? 'none' : 'block';
-    if (subB) subB.style.display = esBuques ? 'block' : 'none';
-    if (esBuques) statsRenderBuques();
+    const subN = document.getElementById('subvista-nacionalidades');
+    
+    if (subP) subP.style.display = (tab === 'puertos') ? 'block' : 'none';
+    if (subB) subB.style.display = (tab === 'buques') ? 'block' : 'none';
+    if (subN) subN.style.display = (tab === 'nacionalidades') ? 'block' : 'none';
+    
+    statsRefreshActual();
   });
 });
 

@@ -318,10 +318,11 @@
           <input type="date" id="fechaHasta">
         </div>
 
-        <!-- Sub-pestañas: Puertos vs Buques -->
+        <!-- Sub-pestañas: Puertos vs Buques vs Nacionalidades -->
         <div class="stats-subnav">
           <button class="stats-subtab active" id="subtab-puertos" data-subtab="puertos">Por Puerto</button>
           <button class="stats-subtab" id="subtab-buques" data-subtab="buques">Por Buque</button>
+          <button class="stats-subtab" id="subtab-nacionalidad" data-subtab="nacionalidades">Nacionalidades</button>
         </div>
 
         <!-- SUBVISTA PUERTOS -->
@@ -352,6 +353,12 @@
           <div class="stats-kpi-grid" id="ebResumenTop"></div>
           <div class="stats-note">Buques ordenados por diversidad de puertos visitados en el Paraná.</div>
           <div class="stats-ranking-list" id="ebRanking"></div>
+        </div>
+
+        <!-- SUBVISTA NACIONALIDADES -->
+        <div id="subvista-nacionalidades" style="display:none">
+          <div class="stats-kpi-grid" id="estResumenTopNac"></div>
+          <div class="stats-ranking-list" id="estRankingNacionalidades"></div>
         </div>
 
         <div id="est-status" class="stats-status"></div>
